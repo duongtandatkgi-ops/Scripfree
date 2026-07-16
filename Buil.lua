@@ -942,9 +942,8 @@ serverTab:CreateSection("Quản Lý Server")
 -- Hàm hỗ trợ tự động chạy lại Script khi sang server mới qua executor
 local queue_on_teleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or function() end
 
--- CẤU HÌNH LINK SCRIPT CỦA BẠN TẠI ĐÂY
--- (Hãy thay "script.lua" thành tên file thực tế chứa đoạn script này)
-local scriptUrl = "https://raw.githubusercontent.com/duongtandatkgi-ops/Toolall/main/script.lua"
+-- CẤU HÌNH LINK SCRIPT MỚI THEO YÊU CẦU
+local scriptUrl = "https://raw.githubusercontent.com/duongtandatkgi-ops/Scripfree/refs/heads/main/Buil.lua"
 local autoExecuteCode = 'loadstring(game:HttpGet("' .. scriptUrl .. '"))()'
 
 serverTab:CreateButton({
