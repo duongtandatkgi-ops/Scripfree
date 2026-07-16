@@ -112,7 +112,7 @@ matTitle.InputEnded:Connect(function(input)
 end)
 
 -- ==========================================
--- TẠO NÚT THU NHỎ / MỞ RỘNG (FLOATING BUTTON NEX)
+-- TẠO NÚT THU NHỎ / M mở RỘNG (FLOATING BUTTON NEX)
 -- ==========================================
 local toggleGui = Instance.new("ScreenGui")
 toggleGui.Name = "NEXToggleGui"
@@ -176,6 +176,38 @@ end)
 local blockData = player:WaitForChild("Data")
 local blocksFolder = workspace:WaitForChild("Blocks")
 
+-- ==========================================
+-- HỆ THỐNG ÉP ĐỘ CHÍNH XÁC (MILI MÉT)
+-- ==========================================
+local PRECISION = 10000 -- Ép tròn 4 số thập phân để đảm bảo khớp tuyệt đối với lưới game
+
+local function snapVector3(vec)
+    return Vector3.new(
+        math.round(vec.X * PRECISION) / PRECISION,
+        math.round(vec.Y * PRECISION) / PRECISION,
+        math.round(vec.Z * PRECISION) / PRECISION
+    )
+end
+
+local function snapCFrame(cf)
+    local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
+    return CFrame.new(
+        math.round(x * PRECISION) / PRECISION,
+        math.round(y * PRECISION) / PRECISION,
+        math.round(z * PRECISION) / PRECISION,
+        math.round(r00 * PRECISION) / PRECISION,
+        math.round(r01 * PRECISION) / PRECISION,
+        math.round(r02 * PRECISION) / PRECISION,
+        math.round(r10 * PRECISION) / PRECISION,
+        math.round(r11 * PRECISION) / PRECISION,
+        math.round(r12 * PRECISION) / PRECISION,
+        math.round(r20 * PRECISION) / PRECISION,
+        math.round(r21 * PRECISION) / PRECISION,
+        math.round(r22 * PRECISION) / PRECISION
+    )
+end
+-- ==========================================
+
 local function getBlockID(name)
     return blockData:FindFirstChild(name) and blockData:FindFirstChild(name).Value or 9
 end
@@ -233,7 +265,8 @@ local function rescaleBlock(block:Model, newPos:CFrame, newSize:Vector3) : ()
         tool = character.ScalingTool
     end
 
-    local args = { block, newSize, newPos }
+    -- Sử dụng hệ thống độ chính xác mili mét ở đây
+    local args = { block, snapVector3(newSize), snapCFrame(newPos) }
     task.spawn(function()
         tool.RF:InvokeServer(unpack(args))
     end)
@@ -262,13 +295,19 @@ local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, An
         tool = character.BuildingTool
     end
     if not relativeTo then relativeTo = getPlayerZone(player) end
+    
+    -- Xử lý độ chính xác tuyệt đối của offset và position
+    local rawOffset = relativeTo and relativeTo.CFrame:ToObjectSpace(pos) or CFrame.new()
+    local snappedOffset = snapCFrame(rawOffset)
+    local snappedPos = snapCFrame(pos)
+
     local args = {
         name,
         getBlockID(name),
         relativeTo,
-        relativeTo and relativeTo.CFrame:ToObjectSpace(pos) or CFrame.new(),
+        snappedOffset,
         ignoreAnchored and true or Anchored,
-        pos,
+        snappedPos,
         false,
     }
     task.spawn(function()
@@ -320,11 +359,13 @@ local function getNewBlockPos(hisBase : BasePart?, block : Model, myBase : BaseP
     end
 
     if not hisBase or not myBase then
-        return block.PPart.CFrame
+        return snapCFrame(block.PPart.CFrame)
     end
 
     local offset = hisBase.CFrame:ToObjectSpace(block.PPart.CFrame)
-    return myBase.CFrame * offset
+    -- Ép offset tuyệt đối để chống sai số thập phân
+    offset = snapCFrame(offset)
+    return snapCFrame(myBase.CFrame * offset)
 end
 
 local function copyBuild(blocks : Folder) : table
@@ -348,7 +389,7 @@ local function copyBuild(blocks : Folder) : table
                     Relative = getPlayerZone(player),
                     Transparency = block.PPart.Transparency,
                     Anchored = block.PPart.Anchored,
-                    Size = block.PPart.Size,
+                    Size = snapVector3(block.PPart.Size), -- Ép size chuẩn mili mét
                     Color = block.PPart.Color
                 })
             else
@@ -1129,3 +1170,4 @@ task.spawn(function()
 end)
 
 Rayfield:LoadConfiguration()
+
