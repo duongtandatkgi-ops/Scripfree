@@ -112,7 +112,7 @@ matTitle.InputEnded:Connect(function(input)
 end)
 
 -- ==========================================
--- TẠO NÚT THU NHỎ / MỞ RỘNG (FLOATING BUTTON NEX)
+-- TẠO NÚT THU NHỎ / M mở RỘNG (FLOATING BUTTON NEX)
 -- ==========================================
 local toggleGui = Instance.new("ScreenGui")
 toggleGui.Name = "NEXToggleGui"
@@ -171,9 +171,15 @@ toggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
+-- CORE FUNCTIONS (MERGED & PRESERVED)
+-- ==========================================
+local blockData = player:WaitForChild("Data")
+local blocksFolder = workspace:WaitForChild("Blocks")
+
+-- ==========================================
 -- HỆ THỐNG ÉP ĐỘ CHÍNH XÁC (MILI MÉT)
 -- ==========================================
-local PRECISION = 10000
+local PRECISION = 10000 -- Ép tròn 4 số thập phân để đảm bảo khớp tuyệt đối với lưới game
 
 local function snapVector3(vec)
     return Vector3.new(
@@ -200,55 +206,83 @@ local function snapCFrame(cf)
         math.round(r22 * PRECISION) / PRECISION
     )
 end
-
 -- ==========================================
--- CORE FUNCTIONS
--- ==========================================
-local blockData = player:WaitForChild("Data")
-local blocksFolder = workspace:WaitForChild("Blocks")
 
 local function getBlockID(name)
     return blockData:FindFirstChild(name) and blockData:FindFirstChild(name).Value or 9
 end
 
-local function getToolSafely(toolName)
-    local tool = character:FindFirstChild(toolName)
-    if tool then return tool end
-    tool = player.Backpack:FindFirstChild(toolName)
-    if tool then
-        humanoid:EquipTool(tool)
-        local t = tick()
-        repeat task.wait() until character:FindFirstChild(toolName) or tick() - t > 1
-        return character:FindFirstChild(toolName)
-    end
-    return nil
-end
-
 local function setTransparency(transparencyWanted : number, block : Model) : ()
-    if not block or block.PPart.Transparency == transparencyWanted then return end
-    local tool = getToolSafely("PropertiesTool")
-    if not tool then return end
+    if not block or not block:FindFirstChild("PPart") then return end
+    -- FIX: Tránh spam lệnh nếu block đã đúng độ trong suốt
+    if math.abs(block.PPart.Transparency - transparencyWanted) < 0.05 then return end
+    
     local calls = transparencyWanted / 0.25
+    local tool
+    if character:FindFirstChild("PropertiesTool") then
+        tool = character["PropertiesTool"]
+    else
+        humanoid:EquipTool(player.Backpack:FindFirstChild("PropertiesTool"))
+        task.wait(0.1)
+        tool = character:FindFirstChild("PropertiesTool")
+    end
+    
+    if not tool then return end
+
+    local args = { "Transparency", { block } }
     task.spawn(function()
         for i = 1, calls do
-            tool.SetPropertieRF:InvokeServer("Transparency", { block })
+            tool.SetPropertieRF:InvokeServer(unpack(args))
         end
     end)
 end
 
 local function setAnchored(block : Model)
     if not block then return end
-    local tool = getToolSafely("PropertiesTool")
+    local tool
+    if character:FindFirstChild("PropertiesTool") then
+        tool = character["PropertiesTool"]
+    else
+        humanoid:EquipTool(player.Backpack:FindFirstChild("PropertiesTool"))
+        task.wait(0.1)
+        tool = character:FindFirstChild("PropertiesTool")
+    end
+
     if not tool then return end
+
+    local args = { "Anchored", { block } }
     task.spawn(function()
-        tool.SetPropertieRF:InvokeServer("Anchored", { block })
+        tool.SetPropertieRF:InvokeServer(unpack(args))
     end)
 end
 
 local function rescaleBlock(block:Model, newPos:CFrame, newSize:Vector3) : ()
-    if not block then return end
-    local tool = getToolSafely("ScalingTool")
+    if not block then 
+        print("Block Not Found, Function rescaleBlock")
+        return 
+    end
+    
+    -- FIX: Tránh spam request lên server nếu block đã đúng kích thước và vị trí (sai số < 0.05)
+    if block:FindFirstChild("PPart") then
+        local sizeDiff = (block.PPart.Size - newSize).Magnitude
+        local posDiff = (block.PPart.Position - newPos.Position).Magnitude
+        if sizeDiff < 0.05 and posDiff < 0.05 then
+            return -- Bỏ qua việc InvokeServer giúp giảm lag cục bộ và chống drop request
+        end
+    end
+
+    local tool
+    if character:FindFirstChild("ScalingTool") then
+        tool = character["ScalingTool"]
+    else
+        humanoid:EquipTool(player.Backpack:FindFirstChild("ScalingTool"))
+        task.wait(0.1) -- Đảm bảo Tool đã kịp cầm lên
+        tool = character:FindFirstChild("ScalingTool")
+    end
+
     if not tool then return end
+
+    -- Sử dụng hệ thống độ chính xác mili mét ở đây
     local args = { block, snapVector3(newSize), snapCFrame(newPos) }
     task.spawn(function()
         tool.RF:InvokeServer(unpack(args))
@@ -269,10 +303,18 @@ local function getPlayerZone(playerInstance : Player) : BasePart
 end
 
 local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, Anchored : boolean) : ()
-    local tool = getToolSafely("BuildingTool")
+    local tool
+    if character:FindFirstChild("BuildingTool") then
+        tool = character["BuildingTool"]
+    else
+        humanoid:EquipTool(player.Backpack:FindFirstChild("BuildingTool"))
+        task.wait(0.1)
+        tool = character:FindFirstChild("BuildingTool")
+    end
+    if not relativeTo then relativeTo = getPlayerZone(player) end
     if not tool then return end
     
-    if not relativeTo then relativeTo = getPlayerZone(player) end
+    -- Xử lý độ chính xác tuyệt đối của offset và position
     local rawOffset = relativeTo and relativeTo.CFrame:ToObjectSpace(pos) or CFrame.new()
     local snappedOffset = snapCFrame(rawOffset)
     local snappedPos = snapCFrame(pos)
@@ -288,6 +330,34 @@ local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, An
     }
     task.spawn(function()
         tool.RF:InvokeServer(unpack(args))
+    end)
+end
+
+local function paintBlock(block : Model, color : Color3)
+    if not block then 
+        print("Block Not Found, function paintBlock")
+        return 
+    end
+    if not block:FindFirstChild("PPart") then 
+        return
+    end
+    
+    -- FIX: Bỏ qua việc gửi request Paint nếu Block đã có màu y hệt
+    if block.PPart.Color == color then return end
+    
+    local tool
+    if character:FindFirstChild("PaintingTool") then
+        tool = character["PaintingTool"]
+    else
+        humanoid:EquipTool(player.Backpack:FindFirstChild("PaintingTool"))
+        task.wait(0.1)
+        tool = character:FindFirstChild("PaintingTool")
+    end
+    if not tool then return end
+    
+    local args = { { block, color } }
+    task.spawn(function()
+        tool.RF:InvokeServer(args)
     end)
 end
 
@@ -314,7 +384,9 @@ local function getNewBlockPos(hisBase : BasePart?, block : Model, myBase : BaseP
         return snapCFrame(block.PPart.CFrame)
     end
 
-    local offset = snapCFrame(hisBase.CFrame:ToObjectSpace(block.PPart.CFrame))
+    local offset = hisBase.CFrame:ToObjectSpace(block.PPart.CFrame)
+    -- Ép offset tuyệt đối để chống sai số thập phân
+    offset = snapCFrame(offset)
     return snapCFrame(myBase.CFrame * offset)
 end
 
@@ -339,7 +411,7 @@ local function copyBuild(blocks : Folder) : table
                     Relative = getPlayerZone(player),
                     Transparency = block.PPart.Transparency,
                     Anchored = block.PPart.Anchored,
-                    Size = snapVector3(block.PPart.Size),
+                    Size = snapVector3(block.PPart.Size), -- Ép size chuẩn mili mét
                     Color = block.PPart.Color
                 })
             else
@@ -354,12 +426,10 @@ end
 
 local function getMissingBlocks(expectedList, createdList)
     local missing = {}
-    local used = {}
     for i, v in ipairs(expectedList) do
         local found = false
         for _, b in ipairs(createdList) do
-            if b and b:FindFirstChild("PPart") and (b.Name == v.Name) and not used[b] then
-                used[b] = true
+            if b and b:FindFirstChild("PPart") and (b.Name == v.Name) then
                 found = true
                 break
             end
@@ -369,6 +439,29 @@ local function getMissingBlocks(expectedList, createdList)
         end
     end
     return missing
+end
+
+-- FIX: Thêm tham số usedBlocks để ngăn việc một block bị lấy ra nhiều lần gây ra lỗi bỏ sót
+local function getBlock(expected, createdList, usedBlocks)
+    usedBlocks = usedBlocks or {}
+    local best = nil
+    local bestDist = math.huge
+    for _, b in ipairs(createdList) do
+        -- Nếu block chưa bị sử dụng, đúng tên và có PPart
+        if b and b:FindFirstChild("PPart") and b.Name == expected.Name and not usedBlocks[b] then
+            local dist = (b.PPart.Position - expected.Pos.Position).Magnitude
+            if dist < bestDist then
+                bestDist = dist
+                best = b
+            end
+        end
+    end
+    
+    if best then
+        usedBlocks[best] = true -- Đánh dấu block này đã được gán mục tiêu
+    end
+    
+    return best
 end
 
 local function getPlayerBase() : Folder
@@ -383,127 +476,52 @@ local function pasteBuild(t, folder)
     pastePercent = 0
     local childrenDebug = 0
     local c
+    local blocks = {}
     local tCount = #t
     local lastPlaced = tick()
-    
     c = folder.ChildAdded:Connect(function(child)
         childrenDebug += 1
         lastPlaced = tick()
     end) 
-    
     print("Started Placing Blocks")
     for i,v in ipairs(t) do
         placeBlock(v.Name, v.Pos, v.Relative, v.Anchored)
-        pastePercent += 20/tCount
-        if i % 10 == 0 then
+        pastePercent += 50/tCount
+        if i % 20 == 0 then
             task.wait(0.05)
         end
     end
-    
     repeat
         task.wait(0.1)
-    until tick() - lastPlaced > 3 or childrenDebug >= tCount
+    until tick() - lastPlaced > 5
+    print("Children Count After Placing: "..childrenDebug .. " Expected: ".. tCount)
+    if tCount - childrenDebug > 0 then
+        local missing = getMissingBlocks(t, blocks)
+        print("Missing " .. #missing .. " children which includes:")
+        for _, b in ipairs(missing) do
+            print("Index:", b.Index, "Name:", b.Name, "Position:", b.Pos.Position)
+        end
+    end
     
-    c:Disconnect()
+    print("Started Painting And Rescaling")
     local playerBaseList = folder:GetChildren()
+    local usedBlocksTracker = {} -- FIX: Bộ nhớ để theo dõi block nào đã được scale/paint
     
-    print("Started Matching Blocks")
-    local matchedPairs = {}
-    local usedBlocksForMatch = {}
-    
-    for i, v in ipairs(t) do
-        local bestDist = math.huge
-        local bestB = nil
-        for _, b in ipairs(playerBaseList) do
-            if b and b:FindFirstChild("PPart") and b.Name == v.Name and not usedBlocksForMatch[b] then
-                local dist = (b.PPart.Position - v.Pos.Position).Magnitude
-                if dist < bestDist then
-                    bestDist = dist
-                    bestB = b
-                end
-            end
+    for i,v in ipairs(t) do
+        local b = getBlock(v, playerBaseList, usedBlocksTracker)
+        if b then
+            rescaleBlock(b, v.Pos, v.Size)
+            paintBlock(b, v.Color)
+            setTransparency(v.Transparency, b)
         end
-        if bestB then
-            usedBlocksForMatch[bestB] = true
-            table.insert(matchedPairs, {b = bestB, v = v})
+        -- FIX: Giảm tốc độ từ % 20 xuống % 10 để server không bị rate-limit rớt lệnh scale
+        if i % 10 == 0 then
+            task.wait(0.05)
         end
+        pastePercent += 50/tCount
     end
-
-    print("Started Rescaling")
-    local scaleTool = getToolSafely("ScalingTool")
-    if scaleTool then
-        task.wait(0.3)
-        for i, pair in ipairs(matchedPairs) do
-            local b, v = pair.b, pair.v
-            local sizeDiff = (b.PPart.Size - v.Size).Magnitude
-            if sizeDiff > 0.05 then
-                task.spawn(function()
-                    scaleTool.RF:InvokeServer(b, snapVector3(v.Size), snapCFrame(v.Pos))
-                end)
-                if i % 5 == 0 then task.wait(0.05) end
-            end
-            pastePercent += 25/#matchedPairs
-        end
-    end
-
-    print("Started Painting")
-    local paintTool = getToolSafely("PaintingTool")
-    if paintTool then
-        task.wait(0.3)
-        
-        -- CƠ CHẾ MỚI: Gom nhóm (Batching) các block cần tô màu
-        local paintBatch = {}
-        for i, pair in ipairs(matchedPairs) do
-            local b, v = pair.b, pair.v
-            local rD = math.abs(b.PPart.Color.R - v.Color.R)
-            local gD = math.abs(b.PPart.Color.G - v.Color.G)
-            local bD = math.abs(b.PPart.Color.B - v.Color.B)
-            if rD > 0.02 or gD > 0.02 or bD > 0.02 then
-                table.insert(paintBatch, { b, v.Color })
-            end
-        end
-        
-        -- Gửi lệnh tô màu theo từng lô 50 block (Chống dội Server)
-        if #paintBatch > 0 then
-            for i = 1, #paintBatch, 50 do
-                local chunk = {}
-                for j = i, math.min(i + 49, #paintBatch) do
-                    table.insert(chunk, paintBatch[j])
-                end
-                
-                -- Đẩy cả 1 lô lên Server cùng 1 lúc
-                task.spawn(function()
-                    paintTool.RF:InvokeServer(chunk)
-                end)
-                task.wait(0.1) -- Cho server nghỉ 0.1s trước khi nạp lô tiếp theo
-            end
-        end
-        pastePercent += 25
-    end
-
-    print("Started Setting Transparency")
-    local propTool = getToolSafely("PropertiesTool")
-    if propTool then
-        task.wait(0.3)
-        for i, pair in ipairs(matchedPairs) do
-            local b, v = pair.b, pair.v
-            if b.PPart.Transparency ~= v.Transparency then
-                local calls = v.Transparency / 0.25
-                task.spawn(function()
-                    for c = 1, calls do
-                        propTool.SetPropertieRF:InvokeServer("Transparency", { b })
-                    end
-                end)
-                if i % 8 == 0 then task.wait(0.05) end
-            end
-        end
-        pastePercent += 30
-    end
-
-    pastePercent = 100
-    task.wait(1)
+    c:Disconnect()
     pastePercent = 0
-    print("Finished Build")
 end
 
 local function getPlayers()
@@ -992,13 +1010,16 @@ funTab:CreateButton({
     end,
 })
 
+
 -- ==========================================
 -- TAB 5: SERVER HOP LOGIC & AUTO EXECUTE
 -- ==========================================
 serverTab:CreateSection("Quản Lý Server")
 
+-- Hàm hỗ trợ tự động chạy lại Script khi sang server mới qua executor
 local queue_on_teleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or function() end
 
+-- CẤU HÌNH LINK SCRIPT MỚI THEO YÊU CẦU
 local scriptUrl = "https://raw.githubusercontent.com/duongtandatkgi-ops/Scripfree/refs/heads/main/Buil.lua"
 local autoExecuteCode = 'loadstring(game:HttpGet("' .. scriptUrl .. '"))()'
 
@@ -1038,7 +1059,7 @@ serverTab:CreateButton({
                 Image = "info"
             })
             pcall(function()
-                queue_on_teleport(autoExecuteCode)
+                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServerId, game.Players.LocalPlayer)
             end)
         else
@@ -1073,7 +1094,7 @@ serverTab:CreateButton({
             
             if #servers > 0 then
                 local randomServer = servers[math.random(1, #servers)]
-                queue_on_teleport(autoExecuteCode)
+                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, game.Players.LocalPlayer)
             else
                 Rayfield:Notify({
