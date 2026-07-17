@@ -291,16 +291,6 @@ local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, An
     end)
 end
 
-local function paintBlock(block : Model, color : Color3)
-    if not block or not block:FindFirstChild("PPart") then return end
-    local tool = getToolSafely("PaintingTool")
-    if not tool then return end
-    local args = { { block, color } }
-    task.spawn(function()
-        tool.RF:InvokeServer(args)
-    end)
-end
-
 local function getJoint(model : Model) : JointInstance?
     for _,v in pairs(model.PPart:GetChildren()) do
         if v:IsA("Snap") or v:IsA("Weld") then
@@ -405,8 +395,8 @@ local function pasteBuild(t, folder)
     for i,v in ipairs(t) do
         placeBlock(v.Name, v.Pos, v.Relative, v.Anchored)
         pastePercent += 20/tCount
-        if i % 15 == 0 then
-            task.wait(0.05) -- Tạo khoảng nghỉ chống lag server
+        if i % 10 == 0 then
+            task.wait(0.05)
         end
     end
     
@@ -421,7 +411,6 @@ local function pasteBuild(t, folder)
     local matchedPairs = {}
     local usedBlocksForMatch = {}
     
-    -- THUẬT TOÁN ĐÁNH DẤU 1-1 CHỐNG TRÙNG LẶP & BỎ SÓT BLOCK
     for i, v in ipairs(t) do
         local bestDist = math.huge
         local bestB = nil
@@ -443,7 +432,7 @@ local function pasteBuild(t, folder)
     print("Started Rescaling")
     local scaleTool = getToolSafely("ScalingTool")
     if scaleTool then
-        task.wait(0.3) -- Chờ tool được cầm chắc chắn
+        task.wait(0.3)
         for i, pair in ipairs(matchedPairs) do
             local b, v = pair.b, pair.v
             local sizeDiff = (b.PPart.Size - v.Size).Magnitude
@@ -451,7 +440,7 @@ local function pasteBuild(t, folder)
                 task.spawn(function()
                     scaleTool.RF:InvokeServer(b, snapVector3(v.Size), snapCFrame(v.Pos))
                 end)
-                if i % 10 == 0 then task.wait(0.05) end
+                if i % 5 == 0 then task.wait(0.05) end
             end
             pastePercent += 25/#matchedPairs
         end
@@ -461,19 +450,35 @@ local function pasteBuild(t, folder)
     local paintTool = getToolSafely("PaintingTool")
     if paintTool then
         task.wait(0.3)
+        
+        -- CƠ CHẾ MỚI: Gom nhóm (Batching) các block cần tô màu
+        local paintBatch = {}
         for i, pair in ipairs(matchedPairs) do
             local b, v = pair.b, pair.v
             local rD = math.abs(b.PPart.Color.R - v.Color.R)
             local gD = math.abs(b.PPart.Color.G - v.Color.G)
             local bD = math.abs(b.PPart.Color.B - v.Color.B)
             if rD > 0.02 or gD > 0.02 or bD > 0.02 then
-                task.spawn(function()
-                    paintTool.RF:InvokeServer({ { b, v.Color } })
-                end)
-                if i % 10 == 0 then task.wait(0.05) end
+                table.insert(paintBatch, { b, v.Color })
             end
-            pastePercent += 25/#matchedPairs
         end
+        
+        -- Gửi lệnh tô màu theo từng lô 50 block (Chống dội Server)
+        if #paintBatch > 0 then
+            for i = 1, #paintBatch, 50 do
+                local chunk = {}
+                for j = i, math.min(i + 49, #paintBatch) do
+                    table.insert(chunk, paintBatch[j])
+                end
+                
+                -- Đẩy cả 1 lô lên Server cùng 1 lúc
+                task.spawn(function()
+                    paintTool.RF:InvokeServer(chunk)
+                end)
+                task.wait(0.1) -- Cho server nghỉ 0.1s trước khi nạp lô tiếp theo
+            end
+        end
+        pastePercent += 25
     end
 
     print("Started Setting Transparency")
@@ -489,10 +494,10 @@ local function pasteBuild(t, folder)
                         propTool.SetPropertieRF:InvokeServer("Transparency", { b })
                     end
                 end)
-                if i % 10 == 0 then task.wait(0.05) end
+                if i % 8 == 0 then task.wait(0.05) end
             end
-            pastePercent += 30/#matchedPairs
         end
+        pastePercent += 30
     end
 
     pastePercent = 100
