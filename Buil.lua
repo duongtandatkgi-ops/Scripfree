@@ -31,7 +31,6 @@ local clipboard = nil
 local playerToBring = nil
 local sitInMouseClickSeatToggle = false
 local specialList = {"Glue"}
-local latestMissingMaterials = {} -- Biến lưu trữ vật liệu bị thiếu
 
 -- Custom GUI Variables (NEX Hub)
 local inspectBase = nil
@@ -373,7 +372,6 @@ local function copyBuild(blocks : Folder) : table
     local t = {}
     local myBase = getPlayerZone(player)
     local hisBase = getPlayerZone(players:FindFirstChild(blocks.Name))
-    latestMissingMaterials = {} -- Làm mới danh sách cảnh báo vật liệu bị thiếu
 
     for _,block in ipairs(blocks:GetChildren()) do
         if block:FindFirstChild("PPart") then
@@ -395,7 +393,6 @@ local function copyBuild(blocks : Folder) : table
                     Color = block.PPart.Color
                 })
             else
-                latestMissingMaterials[block.Name] = (latestMissingMaterials[block.Name] or 0) + 1
                 print("You Dont Have Enough: ".. block.Name .. "s")
             end
         else
@@ -682,30 +679,12 @@ autoBuildTab:CreateButton({
     Callback = function()
         if selectedBase then
             clipboard = copyBuild(selectedBase)
-            
-            -- Kiểm tra và xuất thông báo cảnh báo nếu có vật liệu bị thiếu
-            local missingCount = 0
-            local msg = ""
-            for k, v in pairs(latestMissingMaterials) do
-                missingCount = missingCount + 1
-                msg = msg .. k .. " (x" .. v .. ")\n"
-            end
-
-            if missingCount > 0 then
-                Rayfield:Notify({
-                    Title = "⚠️ THIẾU VẬT LIỆU!",
-                    Content = "Bạn không đủ vật liệu sau để Copy hoàn chỉnh:\n" .. msg,
-                    Duration = 8,
-                    Image = "alert-triangle"
-                })
-            else
-                Rayfield:Notify({
-                    Title = "Thành công",
-                    Content = "Đã Copy thuyền vào bộ nhớ tạm (Đủ 100% vật liệu)!",
-                    Duration = 3,
-                    Image = "check-circle"
-                })
-            end
+            Rayfield:Notify({
+                Title = "Thành công",
+                Content = "Đã Copy thuyền vào bộ nhớ tạm!",
+                Duration = 3,
+                Image = "check-circle"
+            })
         else
             Rayfield:Notify({
                 Title = "Please Select A Valid Player",
@@ -726,59 +705,6 @@ autoBuildTab:CreateButton({
             Rayfield:Notify({
                 Title = "Lỗi",
                 Content = "Bộ nhớ trống, hãy copy trước!",
-                Duration = 3,
-                Image = "alert-triangle"
-            })
-        end
-    end,
-})
-
-autoBuildTab:CreateButton({
-    Name = "Dịch chuyển qua người có thuyền to nhất",
-    Callback = function()
-        local maxBlocks = -1
-        local targetPlayerName = nil
-        local targetBase = nil
-
-        for _, folder in pairs(blocksFolder:GetChildren()) do
-            if folder:IsA("Folder") or folder:IsA("Model") then
-                local blockCount = 0
-                for _, block in ipairs(folder:GetChildren()) do
-                    if block:FindFirstChild("PPart") then
-                        blockCount = blockCount + 1
-                    end
-                end
-
-                if blockCount > maxBlocks and folder.Name ~= player.Name then
-                    maxBlocks = blockCount
-                    targetPlayerName = folder.Name
-                    targetBase = folder
-                end
-            end
-        end
-
-        if targetBase and maxBlocks > 0 then
-            local targetPart = nil
-            for _, block in ipairs(targetBase:GetChildren()) do
-                if block:FindFirstChild("PPart") then
-                    targetPart = block.PPart
-                    break
-                end
-            end
-
-            if targetPart and HRP then
-                HRP:PivotTo(targetPart.CFrame + Vector3.new(0, 5, 0))
-                Rayfield:Notify({
-                    Title = "Dịch chuyển thành công",
-                    Content = "Đã bay đến thuyền của " .. targetPlayerName .. " (" .. maxBlocks .. " blocks)",
-                    Duration = 4,
-                    Image = "map-pin"
-                })
-            end
-        else
-            Rayfield:Notify({
-                Title = "Thất bại",
-                Content = "Không tìm thấy thuyền nào khác có block!",
                 Duration = 3,
                 Image = "alert-triangle"
             })
@@ -1243,4 +1169,4 @@ task.spawn(function()
     end
 end)
 
-Rayfield:LoadConfiguration()
+Rayfield:LoadConfiguration() 
