@@ -1,5 +1,5 @@
 -- ==========================================
--- INTEGRATED NEX HUB & RAYFIELD INTERFACE SUITE
+-- BỘ GIAO DIỆN TÍCH HỢP NEX HUB & RAYFIELD
 -- ==========================================
 
 local HttpService = game:GetService("HttpService")
@@ -18,8 +18,8 @@ local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local HRP = character:WaitForChild("HumanoidRootPart")
 
--- Flags & Variables
-local tweening = false
+-- Cờ và Biến hiệu ứng chuyển động
+local motionEnabled = false
 local index = 1
 local pastePercent = 0
 local usedList = {}
@@ -32,7 +32,7 @@ local playerToBring = nil
 local sitInMouseClickSeatToggle = false
 local specialList = {"Glue"}
 
--- Custom GUI Variables (NEX Hub)
+-- Biến giao diện người dùng tùy chỉnh (NEX Hub)
 local inspectBase = nil
 local inspectTargetName = ""
 local firstSeat = nil
@@ -52,6 +52,7 @@ matFrame.Position = UDim2.new(0.5, -150, 0.5, -200)
 matFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 matFrame.BorderSizePixel = 0
 matFrame.Active = true
+
 Instance.new("UICorner", matFrame).CornerRadius = UDim.new(0, 8)
 Instance.new("UIStroke", matFrame).Color = Color3.fromRGB(0, 150, 255)
 
@@ -72,7 +73,9 @@ closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
 closeBtn.BackgroundTransparency = 1
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.TextSize = 16
-closeBtn.MouseButton1Click:Connect(function() matGui.Enabled = false end)
+closeBtn.MouseButton1Click:Connect(function()
+    matGui.Enabled = false
+end)
 
 local matScroll = Instance.new("ScrollingFrame", matFrame)
 matScroll.Size = UDim2.new(1, -20, 1, -50)
@@ -85,7 +88,7 @@ local uiList = Instance.new("UIListLayout", matScroll)
 uiList.Padding = UDim.new(0, 5)
 uiList.SortOrder = Enum.SortOrder.Name
 
--- Kéo thả cửa sổ Vật Liệu
+-- Kéo thả vật liệu cửa sổ
 local matDragging, matDragInput, matDragStart, matStartPos
 matTitle.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -112,7 +115,7 @@ matTitle.InputEnded:Connect(function(input)
 end)
 
 -- ==========================================
--- TẠO NÚT THU NHỎ / M mở RỘNG (FLOATING BUTTON NEX)
+-- TẠO NÚT THU NHỎ / MỞ RỘNG (NÚT NỔI TIẾP THEO)
 -- ==========================================
 local toggleGui = Instance.new("ScreenGui")
 toggleGui.Name = "NEXToggleGui"
@@ -124,7 +127,7 @@ toggleBtn.Size = UDim2.new(0, 45, 0, 45)
 toggleBtn.Position = UDim2.new(0, 10, 0, 100)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.Text = "NEX"
+toggleBtn.Text = "TIẾP THEO"
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.TextSize = 14
 toggleBtn.BorderSizePixel = 0
@@ -163,7 +166,6 @@ toggleBtn.InputEnded:Connect(function(input)
         dragging = false
     end
 end)
-
 toggleBtn.MouseButton1Click:Connect(function()
     vim:SendKeyEvent(true, Enum.KeyCode.G, false, game)
     task.wait()
@@ -171,16 +173,13 @@ toggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- CORE FUNCTIONS (MERGED & PRESERVED)
+-- CÁC CHỨC NĂNG CỐT LÕI
 -- ==========================================
 local blockData = player:WaitForChild("Data")
 local blocksFolder = workspace:WaitForChild("Blocks")
 
--- ==========================================
--- HỆ THỐNG ÉP ĐỘ CHÍNH XÁC (MILI MÉT)
--- ==========================================
-local PRECISION = 10000 -- Ép tròn 4 số thập phân để đảm bảo khớp tuyệt đối với lưới game
-
+-- Hệ thống ép độ chính xác
+local PRECISION = 10000
 local function snapVector3(vec)
     return Vector3.new(
         math.round(vec.X * PRECISION) / PRECISION,
@@ -192,31 +191,21 @@ end
 local function snapCFrame(cf)
     local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
     return CFrame.new(
-        math.round(x * PRECISION) / PRECISION,
-        math.round(y * PRECISION) / PRECISION,
-        math.round(z * PRECISION) / PRECISION,
-        math.round(r00 * PRECISION) / PRECISION,
-        math.round(r01 * PRECISION) / PRECISION,
-        math.round(r02 * PRECISION) / PRECISION,
-        math.round(r10 * PRECISION) / PRECISION,
-        math.round(r11 * PRECISION) / PRECISION,
-        math.round(r12 * PRECISION) / PRECISION,
-        math.round(r20 * PRECISION) / PRECISION,
-        math.round(r21 * PRECISION) / PRECISION,
-        math.round(r22 * PRECISION) / PRECISION
+        math.round(x * PRECISION) / PRECISION, math.round(y * PRECISION) / PRECISION, math.round(z * PRECISION) / PRECISION,
+        math.round(r00 * PRECISION) / PRECISION, math.round(r01 * PRECISION) / PRECISION, math.round(r02 * PRECISION) / PRECISION,
+        math.round(r10 * PRECISION) / PRECISION, math.round(r11 * PRECISION) / PRECISION, math.round(r12 * PRECISION) / PRECISION,
+        math.round(r20 * PRECISION) / PRECISION, math.round(r21 * PRECISION) / PRECISION, math.round(r22 * PRECISION) / PRECISION
     )
 end
--- ==========================================
 
 local function getBlockID(name)
     return blockData:FindFirstChild(name) and blockData:FindFirstChild(name).Value or 9
 end
 
-local function setTransparency(transparencyWanted : number, block : Model) : ()
+local function setTransparency(transparencyWanted, block)
     if not block or not block:FindFirstChild("PPart") then return end
-    -- FIX: Tránh spam lệnh nếu block đã đúng độ trong suốt
     if math.abs(block.PPart.Transparency - transparencyWanted) < 0.05 then return end
-    
+
     local calls = transparencyWanted / 0.25
     local tool
     if character:FindFirstChild("PropertiesTool") then
@@ -226,7 +215,6 @@ local function setTransparency(transparencyWanted : number, block : Model) : ()
         task.wait(0.1)
         tool = character:FindFirstChild("PropertiesTool")
     end
-    
     if not tool then return end
 
     local args = { "Transparency", { block } }
@@ -237,7 +225,7 @@ local function setTransparency(transparencyWanted : number, block : Model) : ()
     end)
 end
 
-local function setAnchored(block : Model)
+local function setAnchored(block)
     if not block then return end
     local tool
     if character:FindFirstChild("PropertiesTool") then
@@ -247,7 +235,6 @@ local function setAnchored(block : Model)
         task.wait(0.1)
         tool = character:FindFirstChild("PropertiesTool")
     end
-
     if not tool then return end
 
     local args = { "Anchored", { block } }
@@ -256,18 +243,13 @@ local function setAnchored(block : Model)
     end)
 end
 
-local function rescaleBlock(block:Model, newPos:CFrame, newSize:Vector3) : ()
-    if not block then 
-        print("Block Not Found, Function rescaleBlock")
-        return 
-    end
-    
-    -- FIX: Tránh spam request lên server nếu block đã đúng kích thước và vị trí (sai số < 0.05)
+local function rescaleBlock(block, newPos, newSize)
+    if not block then return end
     if block:FindFirstChild("PPart") then
         local sizeDiff = (block.PPart.Size - newSize).Magnitude
         local posDiff = (block.PPart.Position - newPos.Position).Magnitude
         if sizeDiff < 0.05 and posDiff < 0.05 then
-            return -- Bỏ qua việc InvokeServer giúp giảm lag cục bộ và chống drop request
+            return 
         end
     end
 
@@ -276,20 +258,18 @@ local function rescaleBlock(block:Model, newPos:CFrame, newSize:Vector3) : ()
         tool = character["ScalingTool"]
     else
         humanoid:EquipTool(player.Backpack:FindFirstChild("ScalingTool"))
-        task.wait(0.1) -- Đảm bảo Tool đã kịp cầm lên
+        task.wait(0.1)
         tool = character:FindFirstChild("ScalingTool")
     end
-
     if not tool then return end
 
-    -- Sử dụng hệ thống độ chính xác mili mét ở đây
     local args = { block, snapVector3(newSize), snapCFrame(newPos) }
     task.spawn(function()
         tool.RF:InvokeServer(unpack(args))
     end)
 end
 
-local function getPlayerZone(playerInstance : Player) : BasePart
+local function getPlayerZone(playerInstance)
     local teamColor = playerInstance.TeamColor
     for _,v in pairs(workspace:GetChildren()) do
         if v:FindFirstChild("TeamColor") and v.TeamColor.Value then
@@ -298,11 +278,10 @@ local function getPlayerZone(playerInstance : Player) : BasePart
             end
         end
     end
-    print("Base Not Found for player: ".. playerInstance.Name)
     return nil
 end
 
-local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, Anchored : boolean) : ()
+local function placeBlock(name, pos, relativeTo, Anchored)
     local tool
     if character:FindFirstChild("BuildingTool") then
         tool = character["BuildingTool"]
@@ -311,40 +290,33 @@ local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, An
         task.wait(0.1)
         tool = character:FindFirstChild("BuildingTool")
     end
+
     if not relativeTo then relativeTo = getPlayerZone(player) end
     if not tool then return end
-    
-    -- Xử lý độ chính xác tuyệt đối của offset và position
+
     local rawOffset = relativeTo and relativeTo.CFrame:ToObjectSpace(pos) or CFrame.new()
-    local snappedOffset = snapCFrame(rawOffset)
-    local snappedPos = snapCFrame(pos)
+    local capturedOffset = snapCFrame(rawOffset)
+    local capturedPos = snapCFrame(pos)
 
     local args = {
         name,
         getBlockID(name),
         relativeTo,
-        snappedOffset,
+        capturedOffset,
         ignoreAnchored and true or Anchored,
-        snappedPos,
+        capturedPos,
         false,
     }
+
     task.spawn(function()
         tool.RF:InvokeServer(unpack(args))
     end)
 end
 
-local function paintBlock(block : Model, color : Color3)
-    if not block then 
-        print("Block Not Found, function paintBlock")
-        return 
-    end
-    if not block:FindFirstChild("PPart") then 
-        return
-    end
-    
-    -- FIX: Bỏ qua việc gửi request Paint nếu Block đã có màu y hệt
+local function paintBlock(block, color)
+    if not block or not block:FindFirstChild("PPart") then return end
     if block.PPart.Color == color then return end
-    
+
     local tool
     if character:FindFirstChild("PaintingTool") then
         tool = character["PaintingTool"]
@@ -354,19 +326,19 @@ local function paintBlock(block : Model, color : Color3)
         tool = character:FindFirstChild("PaintingTool")
     end
     if not tool then return end
-    
+
     local args = { { block, color } }
     task.spawn(function()
         tool.RF:InvokeServer(args)
     end)
 end
 
-local function getJoint(model : Model) : JointInstance?
+local function getJoint(model)
     for _,v in pairs(model.PPart:GetChildren()) do
         if v:IsA("Snap") or v:IsA("Weld") then
-            if v.Part1 then 
-                if not (v.Part1.Parent == model) then
-                    return v.Part1
+            if v.Part1 then
+                if (v.Part1.Parent == model) then
+                    return v.Part0
                 end
             end
         end
@@ -374,51 +346,44 @@ local function getJoint(model : Model) : JointInstance?
     return getPlayerZone(player)
 end
 
-local function getNewBlockPos(hisBase : BasePart?, block : Model, myBase : BasePart?) : CFrame
-    if not block or not block:FindFirstChild("PPart") then
-        warn("Block missing PPart:", block and block.Name or "nil")
-        return CFrame.new()
-    end
-
-    if not hisBase or not myBase then
-        return snapCFrame(block.PPart.CFrame)
-    end
+local function getNewBlockPos(hisBase, block, myBase)
+    if not block or not block:FindFirstChild("PPart") then return CFrame.new() end
+    if not hisBase or not myBase then return snapCFrame(block.PPart.CFrame) end
 
     local offset = hisBase.CFrame:ToObjectSpace(block.PPart.CFrame)
-    -- Ép offset tuyệt đối để chống sai số thập phân
     offset = snapCFrame(offset)
     return snapCFrame(myBase.CFrame * offset)
 end
 
-local function copyBuild(blocks : Folder) : table
+local function copyBuild(blocks)
     local t = {}
     local myBase = getPlayerZone(player)
     local hisBase = getPlayerZone(players:FindFirstChild(blocks.Name))
 
     for _,block in ipairs(blocks:GetChildren()) do
         if block:FindFirstChild("PPart") then
-            if not (getBlockID(block.Name) == 0 or (usedList[block.Name] or 0) > getBlockID(block.Name)) then 
+            if not (getBlockID(block.Name) == 0 or (usedList[block.Name] or 0) > getBlockID(block.Name)) then
                 local relative = getJoint(block)
                 relative = relative == hisBase and myBase or relative
+
                 if usedList[block.Name] then
                     usedList[block.Name] += 1
                 else
                     usedList[block.Name] = 1
                 end
+
                 table.insert(t, {
                     Name = block.Name,
                     Pos = getNewBlockPos(hisBase, block, myBase),
                     Relative = getPlayerZone(player),
                     Transparency = block.PPart.Transparency,
                     Anchored = block.PPart.Anchored,
-                    Size = snapVector3(block.PPart.Size), -- Ép size chuẩn mili mét
+                    Size = snapVector3(block.PPart.Size),
                     Color = block.PPart.Color
                 })
             else
-                print("You Dont Have Enough: ".. block.Name .. "s")
+                print("Bạn không có đủ: " .. block.Name)
             end
-        else
-            print(block.Name.. " Didnt Have A PPart")
         end
     end
     return t
@@ -441,13 +406,12 @@ local function getMissingBlocks(expectedList, createdList)
     return missing
 end
 
--- FIX: Thêm tham số usedBlocks để ngăn việc một block bị lấy ra nhiều lần gây ra lỗi bỏ sót
 local function getBlock(expected, createdList, usedBlocks)
     usedBlocks = usedBlocks or {}
     local best = nil
     local bestDist = math.huge
+
     for _, b in ipairs(createdList) do
-        -- Nếu block chưa bị sử dụng, đúng tên và có PPart
         if b and b:FindFirstChild("PPart") and b.Name == expected.Name and not usedBlocks[b] then
             local dist = (b.PPart.Position - expected.Pos.Position).Magnitude
             if dist < bestDist then
@@ -456,15 +420,14 @@ local function getBlock(expected, createdList, usedBlocks)
             end
         end
     end
-    
+
     if best then
-        usedBlocks[best] = true -- Đánh dấu block này đã được gán mục tiêu
+        usedBlocks[best] = true
     end
-    
     return best
 end
 
-local function getPlayerBase() : Folder
+local function getPlayerBase()
     for _,child in pairs(blocksFolder:GetChildren()) do
         if child.Name == player.Name then
             return child
@@ -472,18 +435,22 @@ local function getPlayerBase() : Folder
     end
 end
 
+-- ==========================================
+-- CHỨC NĂNG PASTE BUILD + CẢNH BÁO THIẾU VẬT LIỆU
+-- ==========================================
 local function pasteBuild(t, folder)
     pastePercent = 0
     local childrenDebug = 0
     local c
-    local blocks = {}
     local tCount = #t
     local lastPlaced = tick()
+
     c = folder.ChildAdded:Connect(function(child)
         childrenDebug += 1
         lastPlaced = tick()
-    end) 
-    print("Started Placing Blocks")
+    end)
+
+    print("Bắt đầu đặt các khối")
     for i,v in ipairs(t) do
         placeBlock(v.Name, v.Pos, v.Relative, v.Anchored)
         pastePercent += 50/tCount
@@ -491,22 +458,36 @@ local function pasteBuild(t, folder)
             task.wait(0.05)
         end
     end
-    repeat
-        task.wait(0.1)
-    until tick() - lastPlaced > 5
-    print("Children Count After Placing: "..childrenDebug .. " Expected: ".. tCount)
+
+    repeat task.wait(0.1) until tick() - lastPlaced > 5
+
     if tCount - childrenDebug > 0 then
-        local missing = getMissingBlocks(t, blocks)
-        print("Missing " .. #missing .. " children which includes:")
+        local missing = getMissingBlocks(t, folder:GetChildren())
+        print("Thiếu " .. #missing .. " khối bao gồm:")
+        
+        -- [TÍNH NĂNG MỚI]: Đếm và hiện thông báo thiếu vật liệu cụ thể
+        local missingCounts = {}
         for _, b in ipairs(missing) do
-            print("Index:", b.Index, "Name:", b.Name, "Position:", b.Pos.Position)
+            missingCounts[b.Name] = (missingCounts[b.Name] or 0) + 1
         end
+        
+        local missingText = ""
+        for name, count in pairs(missingCounts) do
+            missingText = missingText .. name .. ": " .. count .. "\n"
+        end
+        
+        Rayfield:Notify({
+            Title = "⚠️ THIẾU VẬT LIỆU!",
+            Content = "Bạn không đủ block để xây hoàn chỉnh:\n" .. missingText,
+            Duration = 10,
+            Image = "triangle-alert"
+        })
     end
-    
-    print("Started Painting And Rescaling")
+
+    print("Bắt đầu vẽ và thay đổi kích thước")
     local playerBaseList = folder:GetChildren()
-    local usedBlocksTracker = {} -- FIX: Bộ nhớ để theo dõi block nào đã được scale/paint
-    
+    local usedBlocksTracker = {}
+
     for i,v in ipairs(t) do
         local b = getBlock(v, playerBaseList, usedBlocksTracker)
         if b then
@@ -514,49 +495,47 @@ local function pasteBuild(t, folder)
             paintBlock(b, v.Color)
             setTransparency(v.Transparency, b)
         end
-        -- FIX: Giảm tốc độ từ % 20 xuống % 10 để server không bị rate-limit rớt lệnh scale
         if i % 10 == 0 then
             task.wait(0.05)
         end
         pastePercent += 50/tCount
     end
+
     c:Disconnect()
     pastePercent = 0
 end
 
 local function getPlayers()
-    local playersy = {}
+    local playersList = {}
     for _,playery in pairs(game:GetService("Players"):GetChildren()) do
-        table.insert(playersy, playery.DisplayName)
+        table.insert(playersList, playery.DisplayName)
     end
-    return playersy
+    return playersList
 end
 
-local function getRealName(DisplayNamey : string) : string
+local function getRealName(DisplayNamey)
     for _,v in pairs(players:GetChildren()) do
-        if v.DisplayName == DisplayNamey then return v.Name end
+        if v.DisplayName == DisplayNamey then
+            return v.Name
+        end
     end
-    print("Player Not Found")
     return nil
 end
 
--- ==========================================
--- NEX MATERIAL LOGIC
--- ==========================================
 local function showMaterialList(sourceData, targetName)
     if not sourceData then
         Rayfield:Notify({
             Title = "Lỗi",
-            Content = "Người này không có thuyền hoặc chưa chọn!",
+            Content = "Người này không có thuyền hoặc chưa được chọn!",
             Duration = 3,
-            Image = "alert-triangle"
+            Image = "triangle-alert"
         })
         return
     end
 
     matTitle.Text = " VẬT LIỆU CỦA: " .. string.upper(targetName)
-
     local mats = {}
+
     for _, block in ipairs(sourceData:GetChildren()) do
         if block:FindFirstChild("PPart") then
             mats[block.Name] = (mats[block.Name] or 0) + 1
@@ -574,7 +553,7 @@ local function showMaterialList(sourceData, targetName)
     for name, count in pairs(mats) do
         hasItems = true
         local owned = blockData:FindFirstChild(name) and blockData:FindFirstChild(name).Value or 0
-        
+
         local itemFrame = Instance.new("Frame", matScroll)
         itemFrame.Size = UDim2.new(1, -10, 0, 40)
         itemFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
@@ -584,7 +563,7 @@ local function showMaterialList(sourceData, targetName)
         icon.Size = UDim2.new(0, 30, 0, 30)
         icon.Position = UDim2.new(0, 5, 0, 5)
         icon.BackgroundTransparency = 1
-        icon.Image = "rbxassetid://7331592364" 
+        icon.Image = "rbxassetid://7331592364"
 
         local nameLabel = Instance.new("TextLabel", itemFrame)
         nameLabel.Size = UDim2.new(0.5, -35, 1, 0)
@@ -608,13 +587,13 @@ local function showMaterialList(sourceData, targetName)
 
         ySize = ySize + 45
     end
-    
+
     if not hasItems then
         Rayfield:Notify({
             Title = "Thông báo",
             Content = "Thuyền này không có vật liệu nào!",
             Duration = 3,
-            Image = "alert-triangle"
+            Image = "triangle-alert"
         })
         return
     end
@@ -623,16 +602,14 @@ local function showMaterialList(sourceData, targetName)
     matGui.Enabled = true
 end
 
--- ==========================================
--- FUN TAB UTILITIES
--- ==========================================
-local function bringPlayer(playerToBring : Player , firstSeat : Seat, secondSeat : Seat) : ()
+local function bringPlayer(playerToBring, firstSeat, secondSeat)
     local originalPos = character:GetPivot()
     local otherPlayerCharacter = playerToBring.Character
+
     if not otherPlayerCharacter then
-        print("Other Player No Character Found")
         return
     end
+
     local offset = firstSeat.CFrame:Inverse() * secondSeat.CFrame
     repeat
         local torso = otherPlayerCharacter:FindFirstChild("LowerTorso") or otherPlayerCharacter:FindFirstChild("Torso")
@@ -646,32 +623,33 @@ local function bringPlayer(playerToBring : Player , firstSeat : Seat, secondSeat
     firstSeat:PivotTo(originalPos)
 end
 
-local function getCar() : Model
+local function getCar()
     return humanoid.SeatPart and humanoid.SeatPart.Parent or nil
 end
 
 -- ==========================================
--- RAYFIELD UI INTERFACE
+-- GIAO DIỆN NGƯỜI DÙNG RAYFIELD
 -- ==========================================
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
 local Window = Rayfield:CreateWindow({
-   Name = "Build A Boat For Treasure - NEX HUB Integrated",
-   Icon = 0,
-   LoadingTitle = "Rayfield Interface Suite",
-   LoadingSubtitle = "by Sirius & NEX HUB",
-   Theme = "Default",
-   ToggleUIKeybind = "G",
-   DisableRayfieldPrompts = false,
-   DisableBuildWarnings = false,
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = "BABFT",
-      FileName = "Build A Boat Config"
-   },
+    Name = "Đóng thuyền đi tìm kho báu - Tích hợp NEX HUB",
+    Icon = 0,
+    LoadingTitle = "Bộ giao diện Rayfield",
+    LoadingSubtitle = "by Sirius & NEX HUB",
+    Theme = "Default",
+    ToggleUIKeybind = "G",
+    DisableRayfieldPrompts = false,
+    DisableBuildWarnings = false,
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "BABFT",
+        FileName = "BuildBoatConfig"
+    },
 })
 
--- TABS
-local autoBuildTab = Window:CreateTab("Xây Dựng", "hammer")
+-- TAB
+local autoBuildTab = Window:CreateTab("Xây Build", "hammer")
 local materialTab = Window:CreateTab("Quản Lý", "clipboard-list")
 local autoFarmTab = Window:CreateTab("Auto Farm", "coins")
 local funTab = Window:CreateTab("Fun Tab", "rewind")
@@ -681,24 +659,23 @@ local serverTab = Window:CreateTab("Server", "server")
 -- TAB 1: XÂY DỰNG
 -- ==========================================
 autoBuildTab:CreateButton({
-    Name = "Place Wood Block",
+    Name = "Đặt khối gỗ",
     Callback = function()
         placeBlock("WoodBlock", HRP.CFrame, nil, true)
     end,
 })
 
 autoBuildTab:CreateToggle({
-    Name = "Rescale Block ( click block )",
+    Name = "Thay đổi kích thước khối (nhấp chuột vào khối)",
     Callback = function(Value)
         rescaleClick = Value
-        print("Set rescaleClick to: "..tostring(Value))
     end,
 })
 
 local dd = autoBuildTab:CreateDropdown({
-    Name = "Choose Player Base To Copy",
+    Name = "Chọn cơ sở người chơi để sao chép",
     Options = getPlayers(),
-    CurrentOption = {"None Selected"},
+    CurrentOption = {"Chưa được chọn"},
     MultipleOptions = false,
     Callback = function(Options)
         local realName = getRealName(Options[1])
@@ -711,22 +688,22 @@ local dd = autoBuildTab:CreateDropdown({
 })
 
 autoBuildTab:CreateButton({
-    Name = "Copy Base",
+    Name = "Sao Chép Base",
     Callback = function()
         if selectedBase then
             clipboard = copyBuild(selectedBase)
             Rayfield:Notify({
                 Title = "Thành công",
-                Content = "Đã Copy thuyền vào bộ nhớ tạm!",
+                Content = "Đã sao chép vào bộ nhớ tạm thời!",
                 Duration = 3,
-                Image = "check-circle"
+                Image = "check"
             })
         else
             Rayfield:Notify({
-                Title = "Please Select A Valid Player",
-                Content = "Either No Player Selected or Player Left",
+                Title = "Lỗi",
+                Content = "Không có người chơi nào được chọn",
                 Duration = 10,
-                Image = "alert-triangle"
+                Image = "triangle-alert"
             })
         end
     end,
@@ -740,28 +717,28 @@ autoBuildTab:CreateButton({
         else
             Rayfield:Notify({
                 Title = "Lỗi",
-                Content = "Bộ nhớ trống, hãy copy trước!",
+                Content = "Bộ nhớ trống, hãy sao chép trước!",
                 Duration = 3,
-                Image = "alert-triangle"
+                Image = "triangle-alert"
             })
         end
     end,
 })
 
 local pasteStatus = autoBuildTab:CreateParagraph({
-    Title = "Auto Build Progress", 
+    Title = "Tiến độ xây dựng tự động",
     Content = "0%"
 })
 
 task.spawn(function()
     while task.wait(0.2) do
-        pasteStatus:Set({Title = "Auto Build Progress", Content = tostring(math.floor(pastePercent)) .. "%"})
+        pasteStatus:Set({Title = "Tiến độ xây dựng", Content = tostring(math.floor(pastePercent)) .. "%"})
     end
 end)
 
-autoBuildTab:CreateSection("auto build settings")
+autoBuildTab:CreateSection("Cài đặt tự động xây dựng")
 autoBuildTab:CreateToggle({
-    Name = "Ignore Anchored State",
+    Name = "Bỏ qua trạng thái neo",
     CurrentValue = true,
     Callback = function(Value)
         ignoreAnchored = Value
@@ -774,13 +751,15 @@ autoBuildTab:CreateToggle({
 local dd3 = materialTab:CreateDropdown({
     Name = "Tên của người khác (Chọn để xem)",
     Options = getPlayers(),
-    CurrentOption = {"None Selected"},
+    CurrentOption = {"Chưa được chọn"},
     MultipleOptions = false,
     Callback = function(Options)
         inspectTargetName = Options[1]
         local realName = getRealName(Options[1])
         for _, folder in pairs(blocksFolder:GetChildren()) do
-            if folder.Name == realName then inspectBase = folder end
+            if folder.Name == realName then
+                inspectBase = folder
+            end
         end
     end,
 })
@@ -793,19 +772,19 @@ materialTab:CreateButton({
         else
             Rayfield:Notify({
                 Title = "Lỗi",
-                Content = "Chưa chọn người chơi nào!",
+                Content = "Không chọn người chơi nào!",
                 Duration = 3,
-                Image = "alert-triangle"
+                Image = "triangle-alert"
             })
         end
     end,
 })
 
 -- ==========================================
--- TAB 3: AUTO FARM
+-- TAB 3: NÔNG TRẠI TỰ ĐỘNG
 -- ==========================================
 autoFarmTab:CreateToggle({
-    Name = "Auto Farm Toggle",
+    Name = "Bật/Tắt Tự động Trang trại",
     CurrentValue = false,
     Callback = function(value)
         autofarm = value
@@ -813,14 +792,13 @@ autoFarmTab:CreateToggle({
 })
 
 -- ==========================================
--- TAB 4: FUN TAB & UTILITIES
+-- TAB 4: TAB GIẢI TRÍ & TIỆN ÍCH
 -- ==========================================
 funTab:CreateSection("Bring Player")
-
 local dd2 = funTab:CreateDropdown({
-    Name = "Choose Player To Lock Or Bring",
+    Name = "Chọn người chơi để khóa hoặc mang theo",
     Options = getPlayers(),
-    CurrentOption = {"None Selected"},
+    CurrentOption = {"Chưa được chọn"},
     MultipleOptions = false,
     Callback = function(Options)
         local realName = getRealName(Options[1])
@@ -829,55 +807,34 @@ local dd2 = funTab:CreateDropdown({
 })
 
 funTab:CreateButton({
-    Name = "Sit In The First Seat and Click",
+    Name = "Ngồi vào ghế đầu và bấm nút",
     Callback = function()
         firstSeat = humanoid.SeatPart
-        if firstSeat then
-            print("firstSeat: "..firstSeat:GetFullName())
-        end
     end,
 })
 
 funTab:CreateButton({
-    Name = "Sit In The Second Seat and Click",
+    Name = "Ngồi vào ghế thứ hai và bấm nút",
     Callback = function()
         secondSeat = humanoid.SeatPart
-        if secondSeat then
-            print("secondSeat: "..secondSeat:GetFullName())
-        end
     end,
 })
 
 funTab:CreateButton({
-    Name = "Bring Player after selecting",
+    Name = "Đưa người chơi vào sau khi chọn",
     Callback = function()
         if secondSeat and firstSeat then
             if secondSeat ~= firstSeat then
                 if playerToBring then
                     bringPlayer(playerToBring, firstSeat, secondSeat)
                 else
-                    Rayfield:Notify({
-                        Title = "Please Select A Player and try again",
-                        Content = "Select A Valid Player!",
-                        Duration = 10,
-                        Image = "alert-triangle"
-                    })
+                    Rayfield:Notify({Title = "Lỗi", Content = "Chọn một người chơi hợp lệ!", Duration = 10})
                 end
             else
-                Rayfield:Notify({
-                    Title = "Please Select Two DIFFERENT seats before trying again",
-                    Content = "Select 2 Different Seats connected to the same base and try again",
-                    Duration = 10,
-                    Image = "alert-triangle"
-                })
+                Rayfield:Notify({Title = "Lỗi", Content = "Chọn 2 ghế khác nhau!", Duration = 10})
             end
         else
-            Rayfield:Notify({
-                Title = "Please Select Both Seats Before Trying",
-                Content = "Select 2 Different Seats connected to the same base and try again",
-                Duration = 10,
-                Image = "alert-triangle"
-            })
+            Rayfield:Notify({Title = "Lỗi", Content = "Chọn 2 ghế trước khi thử", Duration = 10})
         end
     end,
 })
@@ -885,76 +842,70 @@ funTab:CreateButton({
 funTab:CreateButton({
     Name = "Car Fly",
     Callback = function()
-        local Players = game:GetService("Players")
-        local RunService = game:GetService("RunService")
-        local UserInputService = game:GetService("UserInputService")
-
-        local player = Players.LocalPlayer
-        local humanoid = player.Character and player.Character:FindFirstChildWhichIsA("Humanoid")
-
-        local flying = false
         local flySpeed = 50
-        local flyConnection
+        local flying = false
         local bv
-
+        local flyConnection
+        
         local screenGui = Instance.new("ScreenGui")
         screenGui.Name = "CarFlyGUI"
         screenGui.Parent = player:WaitForChild("PlayerGui")
         screenGui.ResetOnSpawn = false
-
+        
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(0, 220, 0, 120)
         frame.Position = UDim2.new(0.05, 0, 0.4, 0)
         frame.BackgroundColor3 = Color3.fromRGB(163, 255, 137)
         frame.Parent = screenGui
-
+        
         local toggleButton = Instance.new("TextButton")
         toggleButton.Size = UDim2.new(0, 100, 0, 30)
         toggleButton.Position = UDim2.new(0, 10, 0, 10)
-        toggleButton.Text = "Toggle Fly"
+        toggleButton.Text = "Bật/Tắt Fly"
         toggleButton.Parent = frame
-
+        
         local speedLabel = Instance.new("TextLabel")
         speedLabel.Size = UDim2.new(0, 50, 0, 30)
         speedLabel.Position = UDim2.new(0, 120, 0, 10)
         speedLabel.Text = tostring(flySpeed)
         speedLabel.Parent = frame
-
+        
         local plusButton = Instance.new("TextButton")
         plusButton.Size = UDim2.new(0, 30, 0, 30)
         plusButton.Position = UDim2.new(0, 180, 0, 10)
         plusButton.Text = "+"
         plusButton.Parent = frame
-
+        
         local minusButton = Instance.new("TextButton")
         minusButton.Size = UDim2.new(0, 30, 0, 30)
         minusButton.Position = UDim2.new(0, 180, 0, 50)
         minusButton.Text = "-"
         minusButton.Parent = frame
-
+        
         local destroyButton = Instance.new("TextButton")
         destroyButton.Size = UDim2.new(0, 100, 0, 30)
         destroyButton.Position = UDim2.new(0, 10, 0, 80)
-        destroyButton.Text = "Destroy GUI"
+        destroyButton.Text = "Xóa giao diện"
         destroyButton.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
         destroyButton.Parent = frame
-
+        
         local ctrl = {f=0, b=0, l=0, r=0}
-        UserInputService.InputBegan:Connect(function(input, processed)
+        
+        UIS.InputBegan:Connect(function(input, processed)
             if processed then return end
             if input.KeyCode == Enum.KeyCode.W then ctrl.f = 1 end
             if input.KeyCode == Enum.KeyCode.S then ctrl.b = -1 end
             if input.KeyCode == Enum.KeyCode.A then ctrl.l = -1 end
             if input.KeyCode == Enum.KeyCode.D then ctrl.r = 1 end
         end)
-
-        UserInputService.InputEnded:Connect(function(input)
+        
+        UIS.InputEnded:Connect(function(input)
             if input.KeyCode == Enum.KeyCode.W then ctrl.f = 0 end
             if input.KeyCode == Enum.KeyCode.S then ctrl.b = 0 end
             if input.KeyCode == Enum.KeyCode.A then ctrl.l = 0 end
             if input.KeyCode == Enum.KeyCode.D then ctrl.r = 0 end
         end)
-
+        
         toggleButton.MouseButton1Click:Connect(function()
             flying = not flying
             local car = getCar()
@@ -969,12 +920,10 @@ funTab:CreateButton({
                             bv.Parent = primaryPart
                         end
                         if not flyConnection then
-                            flyConnection = RunService.RenderStepped:Connect(function()
+                            flyConnection = runService.RenderStepped:Connect(function()
                                 if not flying then return end
                                 local cam = workspace.CurrentCamera
-                                local moveDir = (cam.CFrame.LookVector * (ctrl.f + ctrl.b)) +
-                                                ((cam.CFrame * CFrame.new(ctrl.l + ctrl.r, 0, 0)).p - cam.CFrame.p)
-
+                                local moveDir = (cam.CFrame.LookVector * (ctrl.f + ctrl.b)) + ((cam.CFrame * CFrame.new(ctrl.l + ctrl.r, 0, 0)).p - cam.CFrame.p)
                                 if moveDir.Magnitude > 0 then
                                     bv.Velocity = moveDir.Unit * flySpeed
                                 else
@@ -990,17 +939,17 @@ funTab:CreateButton({
                 end
             end
         end)
-
+        
         plusButton.MouseButton1Click:Connect(function()
             flySpeed = flySpeed + 10
             speedLabel.Text = tostring(flySpeed)
         end)
-
+        
         minusButton.MouseButton1Click:Connect(function()
             flySpeed = math.max(10, flySpeed - 10)
             speedLabel.Text = tostring(flySpeed)
         end)
-
+        
         destroyButton.MouseButton1Click:Connect(function()
             flying = false
             if bv then bv:Destroy() bv = nil end
@@ -1010,16 +959,61 @@ funTab:CreateButton({
     end,
 })
 
+-- [TÍNH NĂNG MỚI]: Nút Dịch chuyển đến người có nhiều block nhất
+funTab:CreateSection("Dịch Chuyển & Tìm Kiếm")
+funTab:CreateButton({
+    Name = "Dịch Chuyển Đến Người Có Thuyền Lớn Nhất",
+    Callback = function()
+        local maxBlocks = 0
+        local targetPlayerName = nil
+        
+        for _, folder in pairs(blocksFolder:GetChildren()) do
+            local count = 0
+            for _, block in pairs(folder:GetChildren()) do
+                if block:FindFirstChild("PPart") then
+                    count = count + 1
+                end
+            end
+            
+            if count > maxBlocks then
+                maxBlocks = count
+                targetPlayerName = folder.Name
+            end
+        end
+        
+        if targetPlayerName and maxBlocks > 0 then
+            local targetPlayer = players:FindFirstChild(targetPlayerName)
+            if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                HRP.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame
+                Rayfield:Notify({
+                    Title = "Thành Công",
+                    Content = "Đã dịch chuyển tới " .. targetPlayerName .. " (" .. maxBlocks .. " blocks)",
+                    Duration = 5,
+                    Image = "check"
+                })
+            else
+                Rayfield:Notify({
+                    Title = "Lỗi",
+                    Content = "Người chơi " .. targetPlayerName .. " không có nhân vật hợp lệ trên map!",
+                    Duration = 3,
+                    Image = "triangle-alert"
+                })
+            end
+        else
+            Rayfield:Notify({
+                Title = "Thông báo",
+                Content = "Hiện tại chưa có ai đặt block nào trên bản đồ!",
+                Duration = 3,
+                Image = "info"
+            })
+        end
+    end,
+})
 
 -- ==========================================
--- TAB 5: SERVER HOP LOGIC & AUTO EXECUTE
+-- TAB 5: SERVER LOGIC
 -- ==========================================
-serverTab:CreateSection("Quản Lý Server")
-
--- Hàm hỗ trợ tự động chạy lại Script khi sang server mới qua executor
 local queue_on_teleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or function() end
-
--- CẤU HÌNH LINK SCRIPT MỚI THEO YÊU CẦU
 local scriptUrl = "https://raw.githubusercontent.com/duongtandatkgi-ops/Scripfree/refs/heads/main/Buil.lua"
 local autoExecuteCode = 'loadstring(game:HttpGet("' .. scriptUrl .. '"))()'
 
@@ -1028,20 +1022,15 @@ serverTab:CreateButton({
     Callback = function()
         pcall(function()
             setclipboard(tostring(game.JobId))
-            Rayfield:Notify({
-                Title = "Thành công",
-                Content = "Đã sao chép ID Server!",
-                Duration = 3,
-                Image = "check-circle"
-            })
+            Rayfield:Notify({Title = "Thành công", Content = "ID Máy chủ đã được sao chép!", Duration = 3})
         end)
     end,
 })
 
 local targetServerId = ""
 serverTab:CreateInput({
-    Name = "Nhập ID Server",
-    PlaceholderText = "Dán JobId vào đây để Join...",
+    Name = "Máy chủ ID mới",
+    PlaceholderText = "Dán JobId vào đây...",
     RemoveTextAfterFocusLost = false,
     Callback = function(Text)
         targetServerId = Text
@@ -1049,39 +1038,21 @@ serverTab:CreateInput({
 })
 
 serverTab:CreateButton({
-    Name = "Hop Server Theo ID Đã Nhập",
+    Name = "Hop Server Theo ID",
     Callback = function()
         if targetServerId and targetServerId ~= "" then
-            Rayfield:Notify({
-                Title = "Đang chuyển Server",
-                Content = "Vui lòng chờ giây lát...",
-                Duration = 3,
-                Image = "info"
-            })
+            Rayfield:Notify({Title = "Đang chuyển", Content = "Vui lòng đợi...", Duration = 3})
             pcall(function()
-                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServerId, game.Players.LocalPlayer)
+                queue_on_teleport(autoExecuteCode)
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServerId, player)
             end)
-        else
-            Rayfield:Notify({
-                Title = "Lỗi",
-                Content = "Vui lòng nhập ID Server hợp lệ trước!",
-                Duration = 3,
-                Image = "alert-triangle"
-            })
         end
     end,
 })
 
 serverTab:CreateButton({
-    Name = "Hop Server Ngẫu Nhiên (Random)",
+    Name = "Hop Server Ngẫu Nhiên",
     Callback = function()
-        Rayfield:Notify({
-            Title = "Đang tìm Server...",
-            Content = "Hệ thống đang quét các Server trống...",
-            Duration = 2,
-            Image = "info"
-        })
         pcall(function()
             local req = game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
             local decoded = HttpService:JSONDecode(req)
@@ -1091,25 +1062,17 @@ serverTab:CreateButton({
                     table.insert(servers, v.id)
                 end
             end
-            
             if #servers > 0 then
                 local randomServer = servers[math.random(1, #servers)]
-                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, game.Players.LocalPlayer)
-            else
-                Rayfield:Notify({
-                    Title = "Thất bại",
-                    Content = "Không tìm thấy Server nào phù hợp!",
-                    Duration = 3,
-                    Image = "alert-triangle"
-                })
+                queue_on_teleport(autoExecuteCode)
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, player)
             end
         end)
     end,
 })
 
 -- ==========================================
--- PLAYERS REFRESH FUNCTION
+-- SỰ KIỆN CHUỘT VÀ CẬP NHẬT
 -- ==========================================
 local function refreshAllDropdowns()
     local plrs = getPlayers()
@@ -1117,45 +1080,39 @@ local function refreshAllDropdowns()
     dd2:Refresh(plrs)
     dd3:Refresh(plrs)
 end
-
 players.PlayerAdded:Connect(refreshAllDropdowns)
 players.PlayerRemoving:Connect(refreshAllDropdowns)
 
--- ==========================================
--- MOUSE EVENT FOR CLICK SCALING
--- ==========================================
 local mouse = player:GetMouse()
 mouse.Button1Down:Connect(function()
     if rescaleClick then
         if mouse.Target then
-            print(mouse.Target:GetFullName())
             local ppart = mouse.Target
             rescaleBlock(ppart.Parent, ppart.CFrame, Vector3.new(4, 4, 4))
         end
     end
 end)
 
--- ==========================================
--- BACKGROUND COROUTINES (AFK, AUTO FARM, HEARTBEAT)
--- ==========================================
+-- Background processes
 task.spawn(function()
     while true do
         task.wait()
         if autofarm then
             if not HRP then continue end
             if index == 11 then
-                local Stages = workspace:FindFirstChild("BoatStages")
-                if not Stages then continue end
-                local normalStages = Stages:FindFirstChild("NormalStages")
+                local stages = workspace:FindFirstChild("BoatStages")
+                if not stages then continue end
+                local normalStages = stages:FindFirstChild("NormalStages")
                 if not normalStages then continue end
                 local endpoint = normalStages:FindFirstChild("TheEnd")
                 if not endpoint then continue end
                 local chest = endpoint:FindFirstChild("GoldenChest")
                 if not chest then continue end
+                
                 HRP:PivotTo(chest:GetPivot() + Vector3.new(0, 0, -10))
                 local ii = 0
-                repeat 
-                    task.wait(1) 
+                repeat
+                    task.wait(1)
                     ii += 1
                     if ii % 20 == 0 then
                         HRP:PivotTo(chest:GetPivot() + Vector3.new(0, 0, -10))
@@ -1173,12 +1130,13 @@ task.spawn(function()
                 if not stage then continue end
                 local darkPart = stage:FindFirstChild("DarknessPart")
                 if not darkPart then continue end
+                
                 character:PivotTo(darkPart.CFrame - Vector3.new(0, 0, 15))
                 local tween2 = TS:Create(HRP, TweenInfo.new(2, Enum.EasingStyle.Linear), {CFrame = darkPart.CFrame + Vector3.new(0, 0, 20)})
-                tweening = true
+                motionEnabled = true
                 tween2:Play()
                 tween2.Completed:Wait()
-                tweening = false
+                motionEnabled = false
                 index += 1
             end
         end
@@ -1186,7 +1144,7 @@ task.spawn(function()
 end)
 
 runService.Heartbeat:Connect(function()
-    if tweening and HRP then
+    if motionEnabled and HRP then
         HRP.Velocity = Vector3.zero
     end
 end)
