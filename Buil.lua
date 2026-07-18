@@ -213,20 +213,23 @@ local function getBlockID(name)
 end
 
 local function setTransparency(transparencyWanted : number, block : Model) : ()
-    if not block then return end
-    if block.PPart.Transparency == transparencyWanted then return end
+    if not block or not block:FindFirstChild("PPart") then return end
+    -- FIX: Tránh spam lệnh nếu block đã đúng độ trong suốt
+    if math.abs(block.PPart.Transparency - transparencyWanted) < 0.05 then return end
+    
     local calls = transparencyWanted / 0.25
     local tool
     if character:FindFirstChild("PropertiesTool") then
         tool = character["PropertiesTool"]
     else
-        humanoid:EquipTool(player.Backpack.PropertiesTool)
-        task.wait()
-        tool = character.PropertiesTool
+        humanoid:EquipTool(player.Backpack:FindFirstChild("PropertiesTool"))
+        task.wait(0.1)
+        tool = character:FindFirstChild("PropertiesTool")
     end
+    
+    if not tool then return end
 
     local args = { "Transparency", { block } }
-
     task.spawn(function()
         for i = 1, calls do
             tool.SetPropertieRF:InvokeServer(unpack(args))
@@ -240,10 +243,12 @@ local function setAnchored(block : Model)
     if character:FindFirstChild("PropertiesTool") then
         tool = character["PropertiesTool"]
     else
-        humanoid:EquipTool(player.Backpack.PropertiesTool)
-        task.wait()
-        tool = character.PropertiesTool
+        humanoid:EquipTool(player.Backpack:FindFirstChild("PropertiesTool"))
+        task.wait(0.1)
+        tool = character:FindFirstChild("PropertiesTool")
     end
+
+    if not tool then return end
 
     local args = { "Anchored", { block } }
     task.spawn(function()
@@ -256,14 +261,26 @@ local function rescaleBlock(block:Model, newPos:CFrame, newSize:Vector3) : ()
         print("Block Not Found, Function rescaleBlock")
         return 
     end
+    
+    -- FIX: Tránh spam request lên server nếu block đã đúng kích thước và vị trí (sai số < 0.05)
+    if block:FindFirstChild("PPart") then
+        local sizeDiff = (block.PPart.Size - newSize).Magnitude
+        local posDiff = (block.PPart.Position - newPos.Position).Magnitude
+        if sizeDiff < 0.05 and posDiff < 0.05 then
+            return -- Bỏ qua việc InvokeServer giúp giảm lag cục bộ và chống drop request
+        end
+    end
+
     local tool
     if character:FindFirstChild("ScalingTool") then
         tool = character["ScalingTool"]
     else
-        humanoid:EquipTool(player.Backpack.ScalingTool)
-        task.wait()
-        tool = character.ScalingTool
+        humanoid:EquipTool(player.Backpack:FindFirstChild("ScalingTool"))
+        task.wait(0.1) -- Đảm bảo Tool đã kịp cầm lên
+        tool = character:FindFirstChild("ScalingTool")
     end
+
+    if not tool then return end
 
     -- Sử dụng hệ thống độ chính xác mili mét ở đây
     local args = { block, snapVector3(newSize), snapCFrame(newPos) }
@@ -290,11 +307,12 @@ local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, An
     if character:FindFirstChild("BuildingTool") then
         tool = character["BuildingTool"]
     else
-        humanoid:EquipTool(player.Backpack.BuildingTool)
-        task.wait()
-        tool = character.BuildingTool
+        humanoid:EquipTool(player.Backpack:FindFirstChild("BuildingTool"))
+        task.wait(0.1)
+        tool = character:FindFirstChild("BuildingTool")
     end
     if not relativeTo then relativeTo = getPlayerZone(player) end
+    if not tool then return end
     
     -- Xử lý độ chính xác tuyệt đối của offset và position
     local rawOffset = relativeTo and relativeTo.CFrame:ToObjectSpace(pos) or CFrame.new()
@@ -321,18 +339,22 @@ local function paintBlock(block : Model, color : Color3)
         return 
     end
     if not block:FindFirstChild("PPart") then 
-        print("Not PPart found for: ".. block.Name)
         return
     end
+    
+    -- FIX: Bỏ qua việc gửi request Paint nếu Block đã có màu y hệt
     if block.PPart.Color == color then return end
+    
     local tool
     if character:FindFirstChild("PaintingTool") then
         tool = character["PaintingTool"]
     else
-        humanoid:EquipTool(player.Backpack.PaintingTool)
-        task.wait()
-        tool = character.PaintingTool
+        humanoid:EquipTool(player.Backpack:FindFirstChild("PaintingTool"))
+        task.wait(0.1)
+        tool = character:FindFirstChild("PaintingTool")
     end
+    if not tool then return end
+    
     local args = { { block, color } }
     task.spawn(function()
         tool.RF:InvokeServer(args)
@@ -419,11 +441,14 @@ local function getMissingBlocks(expectedList, createdList)
     return missing
 end
 
-local function getBlock(expected, createdList)
+-- FIX: Thêm tham số usedBlocks để ngăn việc một block bị lấy ra nhiều lần gây ra lỗi bỏ sót
+local function getBlock(expected, createdList, usedBlocks)
+    usedBlocks = usedBlocks or {}
     local best = nil
     local bestDist = math.huge
     for _, b in ipairs(createdList) do
-        if b and b:FindFirstChild("PPart") and b.Name == expected.Name then
+        -- Nếu block chưa bị sử dụng, đúng tên và có PPart
+        if b and b:FindFirstChild("PPart") and b.Name == expected.Name and not usedBlocks[b] then
             local dist = (b.PPart.Position - expected.Pos.Position).Magnitude
             if dist < bestDist then
                 bestDist = dist
@@ -431,6 +456,11 @@ local function getBlock(expected, createdList)
             end
         end
     end
+    
+    if best then
+        usedBlocks[best] = true -- Đánh dấu block này đã được gán mục tiêu
+    end
+    
     return best
 end
 
@@ -472,14 +502,20 @@ local function pasteBuild(t, folder)
             print("Index:", b.Index, "Name:", b.Name, "Position:", b.Pos.Position)
         end
     end
+    
     print("Started Painting And Rescaling")
     local playerBaseList = folder:GetChildren()
+    local usedBlocksTracker = {} -- FIX: Bộ nhớ để theo dõi block nào đã được scale/paint
+    
     for i,v in ipairs(t) do
-        local b = getBlock(v, playerBaseList)
-        rescaleBlock(b, v.Pos, v.Size)
-        paintBlock(b, v.Color)
-        setTransparency(v.Transparency, b)
-        if i % 20 == 0 then
+        local b = getBlock(v, playerBaseList, usedBlocksTracker)
+        if b then
+            rescaleBlock(b, v.Pos, v.Size)
+            paintBlock(b, v.Color)
+            setTransparency(v.Transparency, b)
+        end
+        -- FIX: Giảm tốc độ từ % 20 xuống % 10 để server không bị rate-limit rớt lệnh scale
+        if i % 10 == 0 then
             task.wait(0.05)
         end
         pastePercent += 50/tCount
@@ -1169,4 +1205,4 @@ task.spawn(function()
     end
 end)
 
-Rayfield:LoadConfiguration() 
+Rayfield:LoadConfiguration()
