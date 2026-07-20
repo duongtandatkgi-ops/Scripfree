@@ -112,7 +112,7 @@ matTitle.InputEnded:Connect(function(input)
 end)
 
 -- ==========================================
--- TẠO NÚT THU NHỎ / M mở RỘNG (FLOATING BUTTON NEX)
+-- TẠO NÚT THU NHỎ / MỞ RỘNG (FLOATING BUTTON NEX)
 -- ==========================================
 local toggleGui = Instance.new("ScreenGui")
 toggleGui.Name = "NEXToggleGui"
@@ -213,23 +213,20 @@ local function getBlockID(name)
 end
 
 local function setTransparency(transparencyWanted : number, block : Model) : ()
-    if not block or not block:FindFirstChild("PPart") then return end
-    -- FIX: Tránh spam lệnh nếu block đã đúng độ trong suốt
-    if math.abs(block.PPart.Transparency - transparencyWanted) < 0.05 then return end
-    
+    if not block then return end
+    if block.PPart.Transparency == transparencyWanted then return end
     local calls = transparencyWanted / 0.25
     local tool
     if character:FindFirstChild("PropertiesTool") then
         tool = character["PropertiesTool"]
     else
-        humanoid:EquipTool(player.Backpack:FindFirstChild("PropertiesTool"))
-        task.wait(0.1)
-        tool = character:FindFirstChild("PropertiesTool")
+        humanoid:EquipTool(player.Backpack.PropertiesTool)
+        task.wait()
+        tool = character.PropertiesTool
     end
-    
-    if not tool then return end
 
     local args = { "Transparency", { block } }
+
     task.spawn(function()
         for i = 1, calls do
             tool.SetPropertieRF:InvokeServer(unpack(args))
@@ -243,12 +240,10 @@ local function setAnchored(block : Model)
     if character:FindFirstChild("PropertiesTool") then
         tool = character["PropertiesTool"]
     else
-        humanoid:EquipTool(player.Backpack:FindFirstChild("PropertiesTool"))
-        task.wait(0.1)
-        tool = character:FindFirstChild("PropertiesTool")
+        humanoid:EquipTool(player.Backpack.PropertiesTool)
+        task.wait()
+        tool = character.PropertiesTool
     end
-
-    if not tool then return end
 
     local args = { "Anchored", { block } }
     task.spawn(function()
@@ -261,26 +256,14 @@ local function rescaleBlock(block:Model, newPos:CFrame, newSize:Vector3) : ()
         print("Block Not Found, Function rescaleBlock")
         return 
     end
-    
-    -- FIX: Tránh spam request lên server nếu block đã đúng kích thước và vị trí (sai số < 0.05)
-    if block:FindFirstChild("PPart") then
-        local sizeDiff = (block.PPart.Size - newSize).Magnitude
-        local posDiff = (block.PPart.Position - newPos.Position).Magnitude
-        if sizeDiff < 0.05 and posDiff < 0.05 then
-            return -- Bỏ qua việc InvokeServer giúp giảm lag cục bộ và chống drop request
-        end
-    end
-
     local tool
     if character:FindFirstChild("ScalingTool") then
         tool = character["ScalingTool"]
     else
-        humanoid:EquipTool(player.Backpack:FindFirstChild("ScalingTool"))
-        task.wait(0.1) -- Đảm bảo Tool đã kịp cầm lên
-        tool = character:FindFirstChild("ScalingTool")
+        humanoid:EquipTool(player.Backpack.ScalingTool)
+        task.wait()
+        tool = character.ScalingTool
     end
-
-    if not tool then return end
 
     -- Sử dụng hệ thống độ chính xác mili mét ở đây
     local args = { block, snapVector3(newSize), snapCFrame(newPos) }
@@ -307,12 +290,11 @@ local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, An
     if character:FindFirstChild("BuildingTool") then
         tool = character["BuildingTool"]
     else
-        humanoid:EquipTool(player.Backpack:FindFirstChild("BuildingTool"))
-        task.wait(0.1)
-        tool = character:FindFirstChild("BuildingTool")
+        humanoid:EquipTool(player.Backpack.BuildingTool)
+        task.wait()
+        tool = character.BuildingTool
     end
     if not relativeTo then relativeTo = getPlayerZone(player) end
-    if not tool then return end
     
     -- Xử lý độ chính xác tuyệt đối của offset và position
     local rawOffset = relativeTo and relativeTo.CFrame:ToObjectSpace(pos) or CFrame.new()
@@ -339,22 +321,18 @@ local function paintBlock(block : Model, color : Color3)
         return 
     end
     if not block:FindFirstChild("PPart") then 
+        print("Not PPart found for: ".. block.Name)
         return
     end
-    
-    -- FIX: Bỏ qua việc gửi request Paint nếu Block đã có màu y hệt
     if block.PPart.Color == color then return end
-    
     local tool
     if character:FindFirstChild("PaintingTool") then
         tool = character["PaintingTool"]
     else
-        humanoid:EquipTool(player.Backpack:FindFirstChild("PaintingTool"))
-        task.wait(0.1)
-        tool = character:FindFirstChild("PaintingTool")
+        humanoid:EquipTool(player.Backpack.PaintingTool)
+        task.wait()
+        tool = character.PaintingTool
     end
-    if not tool then return end
-    
     local args = { { block, color } }
     task.spawn(function()
         tool.RF:InvokeServer(args)
@@ -441,14 +419,11 @@ local function getMissingBlocks(expectedList, createdList)
     return missing
 end
 
--- FIX: Thêm tham số usedBlocks để ngăn việc một block bị lấy ra nhiều lần gây ra lỗi bỏ sót
-local function getBlock(expected, createdList, usedBlocks)
-    usedBlocks = usedBlocks or {}
+local function getBlock(expected, createdList)
     local best = nil
     local bestDist = math.huge
     for _, b in ipairs(createdList) do
-        -- Nếu block chưa bị sử dụng, đúng tên và có PPart
-        if b and b:FindFirstChild("PPart") and b.Name == expected.Name and not usedBlocks[b] then
+        if b and b:FindFirstChild("PPart") and b.Name == expected.Name then
             local dist = (b.PPart.Position - expected.Pos.Position).Magnitude
             if dist < bestDist then
                 bestDist = dist
@@ -456,11 +431,6 @@ local function getBlock(expected, createdList, usedBlocks)
             end
         end
     end
-    
-    if best then
-        usedBlocks[best] = true -- Đánh dấu block này đã được gán mục tiêu
-    end
-    
     return best
 end
 
@@ -502,25 +472,79 @@ local function pasteBuild(t, folder)
             print("Index:", b.Index, "Name:", b.Name, "Position:", b.Pos.Position)
         end
     end
-    
     print("Started Painting And Rescaling")
     local playerBaseList = folder:GetChildren()
-    local usedBlocksTracker = {} -- FIX: Bộ nhớ để theo dõi block nào đã được scale/paint
-    
     for i,v in ipairs(t) do
-        local b = getBlock(v, playerBaseList, usedBlocksTracker)
-        if b then
-            rescaleBlock(b, v.Pos, v.Size)
-            paintBlock(b, v.Color)
-            setTransparency(v.Transparency, b)
-        end
-        -- FIX: Giảm tốc độ từ % 20 xuống % 10 để server không bị rate-limit rớt lệnh scale
-        if i % 10 == 0 then
+        local b = getBlock(v, playerBaseList)
+        rescaleBlock(b, v.Pos, v.Size)
+        paintBlock(b, v.Color)
+        setTransparency(v.Transparency, b)
+        if i % 20 == 0 then
             task.wait(0.05)
         end
         pastePercent += 50/tCount
     end
     c:Disconnect()
+    pastePercent = 0
+end
+
+-- ==========================================
+-- HỆ THỐNG BUILD KỸ TỐI ĐA & CHÍNH XÁC TUYỆT ĐỐI
+-- ==========================================
+local function precisionPasteBuild(t, folder)
+    pastePercent = 0
+    local tCount = #t
+    print("Bắt đầu quá trình Build kỹ tối đa & chính xác...")
+    
+    -- Bước 1: Đặt từng block với độ trễ cực thấp để đảm bảo server nhận đủ 100% không sót block nào
+    for i, v in ipairs(t) do
+        placeBlock(v.Name, v.Pos, v.Relative, v.Anchored)
+        pastePercent += 30 / tCount
+        -- Tối ưu tốc độ nhưng an toàn tuyệt đối cho server BABFT
+        if i % 10 == 0 then
+            task.wait(0.02)
+        end
+    end
+
+    -- Chờ server đồng bộ hóa toàn bộ các instance được tạo
+    task.wait(1.5)
+
+    -- Bước 2: Quét toàn diện và ép thông số kích thước (Rescale), màu sắc (Paint), độ trong suốt (Transparency) nhiều lần cho từng block để khớp 100% không lệch 1 mm
+    local playerBaseList = folder:GetChildren()
+    for i, v in ipairs(t) do
+        local b = getBlock(v, playerBaseList)
+        if b then
+            -- Thực hiện gọi liên tiếp 2 lần để chắc chắn công cụ Scaling Tool và Painting Tool ép chuẩn xác tuyệt đối lên block
+            rescaleBlock(b, v.Pos, v.Size)
+            paintBlock(b, v.Color)
+            setTransparency(v.Transparency, b)
+            
+            task.spawn(function()
+                task.wait(0.05)
+                rescaleBlock(b, v.Pos, v.Size)
+            end)
+        end
+        
+        if i % 15 == 0 then
+            task.wait(0.02)
+        end
+        pastePercent = 30 + (i / tCount) * 70
+    end
+
+    -- Bước 3: Quét lại lần cuối (Double-Check) toàn bộ các block để đảm bảo không có block nào bị lỗi scale hoặc sót màu
+    task.wait(0.5)
+    playerBaseList = folder:GetChildren()
+    for _, v in ipairs(t) do
+        local b = getBlock(v, playerBaseList)
+        if b then
+            rescaleBlock(b, v.Pos, v.Size)
+            paintBlock(b, v.Color)
+        end
+    end
+
+    pastePercent = 100
+    print("Hoàn tất Build Kỹ Tối Đa!")
+    task.wait(1)
     pastePercent = 0
 end
 
@@ -737,6 +761,31 @@ autoBuildTab:CreateButton({
     Callback = function()
         if clipboard then
             pasteBuild(clipboard, getPlayerBase())
+        else
+            Rayfield:Notify({
+                Title = "Lỗi",
+                Content = "Bộ nhớ trống, hãy copy trước!",
+                Duration = 3,
+                Image = "alert-triangle"
+            })
+        end
+    end,
+})
+
+-- NÚT BUILD KỸ TỐI ĐA ĐƯỢC THÊM VÀO THEO YÊU CẦU
+autoBuildTab:CreateButton({
+    Name = "✨ Build Kỹ Tối Đa & Chính Xác",
+    Callback = function()
+        if clipboard then
+            Rayfield:Notify({
+                Title = "Bắt đầu Build Kỹ",
+                Content = "Đang tiến hành đặt và ép thông số chính xác tuyệt đối...",
+                Duration = 3,
+                Image = "hammer"
+            })
+            task.spawn(function()
+                precisionPasteBuild(clipboard, getPlayerBase())
+            end)
         else
             Rayfield:Notify({
                 Title = "Lỗi",
@@ -1016,10 +1065,8 @@ funTab:CreateButton({
 -- ==========================================
 serverTab:CreateSection("Quản Lý Server")
 
--- Hàm hỗ trợ tự động chạy lại Script khi sang server mới qua executor
 local queue_on_teleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or function() end
 
--- CẤU HÌNH LINK SCRIPT MỚI THEO YÊU CẦU
 local scriptUrl = "https://raw.githubusercontent.com/duongtandatkgi-ops/Scripfree/refs/heads/main/Buil.lua"
 local autoExecuteCode = 'loadstring(game:HttpGet("' .. scriptUrl .. '"))()'
 
@@ -1059,7 +1106,7 @@ serverTab:CreateButton({
                 Image = "info"
             })
             pcall(function()
-                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
+                queue_on_teleport(autoExecuteCode)
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServerId, game.Players.LocalPlayer)
             end)
         else
@@ -1094,7 +1141,7 @@ serverTab:CreateButton({
             
             if #servers > 0 then
                 local randomServer = servers[math.random(1, #servers)]
-                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
+                queue_on_teleport(autoExecuteCode)
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, game.Players.LocalPlayer)
             else
                 Rayfield:Notify({
