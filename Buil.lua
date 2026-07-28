@@ -112,7 +112,7 @@ matTitle.InputEnded:Connect(function(input)
 end)
 
 -- ==========================================
--- TẠO NÚT THU NHỎ / MỞ RỘNG (FLOATING BUTTON NEX)
+-- TẠO NÚT THU NHỎ / M mở RỘNG (FLOATING BUTTON NEX)
 -- ==========================================
 local toggleGui = Instance.new("ScreenGui")
 toggleGui.Name = "NEXToggleGui"
@@ -488,66 +488,6 @@ local function pasteBuild(t, folder)
     pastePercent = 0
 end
 
--- ==========================================
--- HỆ THỐNG BUILD KỸ TỐI ĐA & CHÍNH XÁC TUYỆT ĐỐI
--- ==========================================
-local function precisionPasteBuild(t, folder)
-    pastePercent = 0
-    local tCount = #t
-    print("Bắt đầu quá trình Build kỹ tối đa & chính xác...")
-    
-    -- Bước 1: Đặt từng block với độ trễ cực thấp để đảm bảo server nhận đủ 100% không sót block nào
-    for i, v in ipairs(t) do
-        placeBlock(v.Name, v.Pos, v.Relative, v.Anchored)
-        pastePercent += 30 / tCount
-        -- Tối ưu tốc độ nhưng an toàn tuyệt đối cho server BABFT
-        if i % 10 == 0 then
-            task.wait(0.02)
-        end
-    end
-
-    -- Chờ server đồng bộ hóa toàn bộ các instance được tạo
-    task.wait(1.5)
-
-    -- Bước 2: Quét toàn diện và ép thông số kích thước (Rescale), màu sắc (Paint), độ trong suốt (Transparency) nhiều lần cho từng block để khớp 100% không lệch 1 mm
-    local playerBaseList = folder:GetChildren()
-    for i, v in ipairs(t) do
-        local b = getBlock(v, playerBaseList)
-        if b then
-            -- Thực hiện gọi liên tiếp 2 lần để chắc chắn công cụ Scaling Tool và Painting Tool ép chuẩn xác tuyệt đối lên block
-            rescaleBlock(b, v.Pos, v.Size)
-            paintBlock(b, v.Color)
-            setTransparency(v.Transparency, b)
-            
-            task.spawn(function()
-                task.wait(0.05)
-                rescaleBlock(b, v.Pos, v.Size)
-            end)
-        end
-        
-        if i % 15 == 0 then
-            task.wait(0.02)
-        end
-        pastePercent = 30 + (i / tCount) * 70
-    end
-
-    -- Bước 3: Quét lại lần cuối (Double-Check) toàn bộ các block để đảm bảo không có block nào bị lỗi scale hoặc sót màu
-    task.wait(0.5)
-    playerBaseList = folder:GetChildren()
-    for _, v in ipairs(t) do
-        local b = getBlock(v, playerBaseList)
-        if b then
-            rescaleBlock(b, v.Pos, v.Size)
-            paintBlock(b, v.Color)
-        end
-    end
-
-    pastePercent = 100
-    print("Hoàn tất Build Kỹ Tối Đa!")
-    task.wait(1)
-    pastePercent = 0
-end
-
 local function getPlayers()
     local playersy = {}
     for _,playery in pairs(game:GetService("Players"):GetChildren()) do
@@ -772,30 +712,65 @@ autoBuildTab:CreateButton({
     end,
 })
 
--- NÚT BUILD KỸ TỐI ĐA ĐƯỢC THÊM VÀO THEO YÊU CẦU
+-- === NÚT XÓA VẬT LIỆU MỚI THÊM ===
 autoBuildTab:CreateButton({
-    Name = "✨ Build Kỹ Tối Đa & Chính Xác",
+    Name = "Xóa vật liệu cũ",
     Callback = function()
-        if clipboard then
+        local base = getPlayerBase()
+        if not base then return end
+        
+        local blocks = base:GetChildren()
+        if #blocks == 0 then return end
+        
+        -- Lấy tool xóa: ưu tiên "DeleteTool", nếu không thì lấy tool đầu tiên trong balo (ô số 1)
+        local deleteTool = character:FindFirstChild("DeleteTool") or player.Backpack:FindFirstChild("DeleteTool") or player.Backpack:GetChildren()[1]
+        
+        if deleteTool then
+            -- Trang bị tool nếu đang cất trong Backpack
+            if deleteTool.Parent == player.Backpack then
+                humanoid:EquipTool(deleteTool)
+                task.wait(0.2)
+                deleteTool = character:FindFirstChild(deleteTool.Name)
+            end
+            
             Rayfield:Notify({
-                Title = "Bắt đầu Build Kỹ",
-                Content = "Đang tiến hành đặt và ép thông số chính xác tuyệt đối...",
-                Duration = 3,
-                Image = "hammer"
+                Title = "Đang xóa...",
+                Content = "Đang dọn dẹp toàn bộ vật liệu cũ",
+                Duration = 2,
+                Image = "trash"
             })
+            
             task.spawn(function()
-                precisionPasteBuild(clipboard, getPlayerBase())
+                for i, block in ipairs(blocks) do
+                    if block and block.Parent then
+                        pcall(function()
+                            if deleteTool:FindFirstChild("RF") then
+                                deleteTool.RF:InvokeServer(block)
+                            end
+                        end)
+                    end
+                    -- Giảm thiểu giật lag khi xóa số lượng lớn
+                    if i % 20 == 0 then task.wait(0.05) end
+                end
+                
+                Rayfield:Notify({
+                    Title = "Hoàn tất",
+                    Content = "Đã xóa xong toàn bộ vật liệu cũ!",
+                    Duration = 3,
+                    Image = "check-circle"
+                })
             end)
         else
             Rayfield:Notify({
                 Title = "Lỗi",
-                Content = "Bộ nhớ trống, hãy copy trước!",
+                Content = "Không tìm thấy Tool xóa (hoặc tool ở ô số 1)!",
                 Duration = 3,
                 Image = "alert-triangle"
             })
         end
     end,
 })
+-- =================================
 
 local pasteStatus = autoBuildTab:CreateParagraph({
     Title = "Auto Build Progress", 
@@ -1065,8 +1040,10 @@ funTab:CreateButton({
 -- ==========================================
 serverTab:CreateSection("Quản Lý Server")
 
+-- Hàm hỗ trợ tự động chạy lại Script khi sang server mới qua executor
 local queue_on_teleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or function() end
 
+-- CẤU HÌNH LINK SCRIPT MỚI THEO YÊU CẦU
 local scriptUrl = "https://raw.githubusercontent.com/duongtandatkgi-ops/Scripfree/refs/heads/main/Buil.lua"
 local autoExecuteCode = 'loadstring(game:HttpGet("' .. scriptUrl .. '"))()'
 
@@ -1106,7 +1083,7 @@ serverTab:CreateButton({
                 Image = "info"
             })
             pcall(function()
-                queue_on_teleport(autoExecuteCode)
+                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServerId, game.Players.LocalPlayer)
             end)
         else
@@ -1141,7 +1118,7 @@ serverTab:CreateButton({
             
             if #servers > 0 then
                 local randomServer = servers[math.random(1, #servers)]
-                queue_on_teleport(autoExecuteCode)
+                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, game.Players.LocalPlayer)
             else
                 Rayfield:Notify({
