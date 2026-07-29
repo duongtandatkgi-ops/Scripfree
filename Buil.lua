@@ -38,6 +38,11 @@ local inspectTargetName = ""
 local firstSeat = nil
 local secondSeat = nil
 
+-- TẠO THƯ MỤC LƯU FILE CHO DELTA/EXECUTORS
+if isfolder and not isfolder("BABFT_Builds") then
+    makefolder("BABFT_Builds")
+end
+
 -- ==========================================
 -- GIAO DIỆN XEM VẬT LIỆU (CỬA SỔ NHỎ NEX)
 -- ==========================================
@@ -505,6 +510,71 @@ local function getRealName(DisplayNamey : string) : string
 end
 
 -- ==========================================
+-- FILE SAVE/LOAD HELPER FUNCTIONS
+-- ==========================================
+local function serializeData(data)
+    local serialized = {}
+    for i, v in ipairs(data) do
+        local sItem = {
+            Name = v.Name,
+            Transparency = v.Transparency,
+            Anchored = v.Anchored,
+        }
+        if v.Pos then
+            local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = v.Pos:GetComponents()
+            sItem.Pos = {x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22}
+        end
+        if v.Size then
+            sItem.Size = {v.Size.X, v.Size.Y, v.Size.Z}
+        end
+        if v.Color then
+            sItem.Color = {v.Color.R, v.Color.G, v.Color.B}
+        end
+        table.insert(serialized, sItem)
+    end
+    return serialized
+end
+
+local function deserializeData(data)
+    local deserialized = {}
+    for i, v in ipairs(data) do
+        local dItem = {
+            Name = v.Name,
+            Transparency = v.Transparency,
+            Anchored = v.Anchored,
+            Relative = getPlayerZone(player)
+        }
+        if v.Pos then
+            dItem.Pos = CFrame.new(unpack(v.Pos))
+        end
+        if v.Size then
+            dItem.Size = Vector3.new(unpack(v.Size))
+        end
+        if v.Color then
+            dItem.Color = Color3.new(unpack(v.Color))
+        end
+        table.insert(deserialized, dItem)
+    end
+    return deserialized
+end
+
+local function getSavedBuilds()
+    local builds = {}
+    if isfolder and isfolder("BABFT_Builds") then
+        local files = listfiles("BABFT_Builds")
+        for _, file in ipairs(files) do
+            if file:match("%.Build$") then
+                local name = file:match("([^/\\]+)%.Build$")
+                if name then table.insert(builds, name) end
+            end
+        end
+    end
+    if #builds == 0 then return {"None"} end
+    return builds
+end
+
+
+-- ==========================================
 -- NEX MATERIAL LOGIC
 -- ==========================================
 local function showMaterialList(sourceData, targetName)
@@ -636,10 +706,106 @@ local Window = Rayfield:CreateWindow({
 
 -- TABS
 local autoBuildTab = Window:CreateTab("Xây Dựng", "hammer")
+local fileBuildTab = Window:CreateTab("Lưu / Tải Tệp (.Build)", "save") -- TAB MỚI LƯU/TẢI FILE
 local materialTab = Window:CreateTab("Quản Lý", "clipboard-list")
 local autoFarmTab = Window:CreateTab("Auto Farm", "coins")
 local funTab = Window:CreateTab("Fun Tab", "rewind")
 local serverTab = Window:CreateTab("Server", "server")
+
+-- ==========================================
+-- TAB: LƯU / TẢI TỆP (.BUILD) - MỚI
+-- ==========================================
+local targetPlayerToSave = nil
+local fileNameToSave = ""
+local selectedFileToLoad = ""
+
+fileBuildTab:CreateSection("LƯU THUYỀN VÀO MÁY (FILE .Build)")
+
+local ddSave = fileBuildTab:CreateDropdown({
+    Name = "1. Chọn Người Chơi Để Lưu (Copy)",
+    Options = getPlayers(),
+    CurrentOption = {"None Selected"},
+    MultipleOptions = false,
+    Callback = function(Options)
+        local realName = getRealName(Options[1])
+        for _,folder in pairs(blocksFolder:GetChildren()) do
+            if folder.Name == realName then
+                targetPlayerToSave = folder
+            end
+        end
+    end,
+})
+
+fileBuildTab:CreateInput({
+    Name = "2. Đặt Tên Cho Tệp",
+    PlaceholderText = "Nhập tên thuyền (vd: thuyen_sieu_to)...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        fileNameToSave = Text
+    end,
+})
+
+fileBuildTab:CreateButton({
+    Name = "3. LƯU THÀNH TỆP (.Build)",
+    Callback = function()
+        if not writefile then
+            Rayfield:Notify({Title="Lỗi", Content="Trình chạy (Executor) của bạn không hỗ trợ chức năng ghi file!", Duration=3, Image="alert-triangle"})
+            return
+        end
+        if fileNameToSave == "" then
+            Rayfield:Notify({Title="Lỗi", Content="Vui lòng nhập tên tệp trước khi lưu!", Duration=3, Image="alert-triangle"})
+            return
+        end
+        if targetPlayerToSave then
+            local rawData = copyBuild(targetPlayerToSave)
+            local serialized = serializeData(rawData)
+            local json = HttpService:JSONEncode(serialized)
+            writefile("BABFT_Builds/" .. fileNameToSave .. ".Build", json)
+            Rayfield:Notify({Title="Thành Công", Content="Đã lưu tệp: " .. fileNameToSave .. ".Build vào thư mục workspace/BABFT_Builds", Duration=4, Image="check-circle"})
+        else
+            Rayfield:Notify({Title="Lỗi", Content="Vui lòng chọn người chơi hợp lệ!", Duration=3, Image="alert-triangle"})
+        end
+    end,
+})
+
+fileBuildTab:CreateSection("TẢI & XÂY DỰNG TỪ TỆP (.Build)")
+
+local ddLoad = fileBuildTab:CreateDropdown({
+    Name = "Chọn Tệp Đã Lưu",
+    Options = getSavedBuilds(),
+    CurrentOption = {"None"},
+    MultipleOptions = false,
+    Callback = function(Options)
+        selectedFileToLoad = Options[1]
+    end,
+})
+
+fileBuildTab:CreateButton({
+    Name = "🔄 Làm Mới Danh Sách Tệp",
+    Callback = function()
+        ddLoad:Refresh(getSavedBuilds())
+    end,
+})
+
+fileBuildTab:CreateButton({
+    Name = "🚀 TẢI & XÂY DỰNG TỆP NÀY",
+    Callback = function()
+        if selectedFileToLoad ~= "" and selectedFileToLoad ~= "None" then
+            if readfile then
+                local path = "BABFT_Builds/" .. selectedFileToLoad .. ".Build"
+                if isfile(path) then
+                    local json = readfile(path)
+                    local decoded = HttpService:JSONDecode(json)
+                    clipboard = deserializeData(decoded)
+                    Rayfield:Notify({Title="Đang Xây", Content="Đã tải dữ liệu, bắt đầu xây: " .. selectedFileToLoad, Duration=3, Image="hammer"})
+                    pasteBuild(clipboard, getPlayerBase())
+                end
+            end
+        else
+            Rayfield:Notify({Title="Lỗi", Content="Vui lòng chọn một tệp từ danh sách!", Duration=3, Image="alert-triangle"})
+        end
+    end,
+})
 
 -- ==========================================
 -- TAB 1: XÂY DỰNG
@@ -712,9 +878,9 @@ autoBuildTab:CreateButton({
     end,
 })
 
--- === NÚT XÓA VẬT LIỆU MỚI THÊM ===
+-- === NÚT XÓA VẬT LIỆU MỚI THÊM (ĐÃ ĐƯỢC CHỈNH SỬA XÓA NGAY LẬP TỨC) ===
 autoBuildTab:CreateButton({
-    Name = "Xóa vật liệu cũ",
+    Name = "Xóa vật liệu cũ (Xóa Ngay Lập Tức)",
     Callback = function()
         local base = getPlayerBase()
         if not base then return end
@@ -722,11 +888,9 @@ autoBuildTab:CreateButton({
         local blocks = base:GetChildren()
         if #blocks == 0 then return end
         
-        -- Lấy tool xóa: ưu tiên "DeleteTool", nếu không thì lấy tool đầu tiên trong balo (ô số 1)
         local deleteTool = character:FindFirstChild("DeleteTool") or player.Backpack:FindFirstChild("DeleteTool") or player.Backpack:GetChildren()[1]
         
         if deleteTool then
-            -- Trang bị tool nếu đang cất trong Backpack
             if deleteTool.Parent == player.Backpack then
                 humanoid:EquipTool(deleteTool)
                 task.wait(0.2)
@@ -735,35 +899,34 @@ autoBuildTab:CreateButton({
             
             Rayfield:Notify({
                 Title = "Đang xóa...",
-                Content = "Đang dọn dẹp toàn bộ vật liệu cũ",
+                Content = "Đang phá hủy tất cả block với tốc độ tối đa!",
                 Duration = 2,
                 Image = "trash"
             })
             
-            task.spawn(function()
-                for i, block in ipairs(blocks) do
-                    if block and block.Parent then
+            -- Xóa không có độ trễ bằng cách tạo thread cho mỗi block
+            for _, block in ipairs(blocks) do
+                if block and block.Parent then
+                    task.spawn(function()
                         pcall(function()
                             if deleteTool:FindFirstChild("RF") then
                                 deleteTool.RF:InvokeServer(block)
                             end
                         end)
-                    end
-                    -- Giảm thiểu giật lag khi xóa số lượng lớn
-                    if i % 20 == 0 then task.wait(0.05) end
+                    end)
                 end
-                
-                Rayfield:Notify({
-                    Title = "Hoàn tất",
-                    Content = "Đã xóa xong toàn bộ vật liệu cũ!",
-                    Duration = 3,
-                    Image = "check-circle"
-                })
-            end)
+            end
+            
+            Rayfield:Notify({
+                Title = "Hoàn tất",
+                Content = "Đã gửi lệnh xóa toàn bộ vật liệu!",
+                Duration = 3,
+                Image = "check-circle"
+            })
         else
             Rayfield:Notify({
                 Title = "Lỗi",
-                Content = "Không tìm thấy Tool xóa (hoặc tool ở ô số 1)!",
+                Content = "Không tìm thấy Tool xóa!",
                 Duration = 3,
                 Image = "alert-triangle"
             })
@@ -1083,7 +1246,7 @@ serverTab:CreateButton({
                 Image = "info"
             })
             pcall(function()
-                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
+                queue_on_teleport(autoExecuteCode)
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServerId, game.Players.LocalPlayer)
             end)
         else
@@ -1118,7 +1281,7 @@ serverTab:CreateButton({
             
             if #servers > 0 then
                 local randomServer = servers[math.random(1, #servers)]
-                queue_on_teleport(autoExecuteCode) -- Bật lại script qua lệnh queue_on_teleport
+                queue_on_teleport(autoExecuteCode)
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, game.Players.LocalPlayer)
             else
                 Rayfield:Notify({
@@ -1140,6 +1303,7 @@ local function refreshAllDropdowns()
     dd:Refresh(plrs)
     dd2:Refresh(plrs)
     dd3:Refresh(plrs)
+    ddSave:Refresh(plrs) -- THÊM REFRESH CHO TAB TỆP
 end
 
 players.PlayerAdded:Connect(refreshAllDropdowns)
