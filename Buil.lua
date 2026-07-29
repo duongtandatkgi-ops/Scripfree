@@ -38,9 +38,9 @@ local inspectTargetName = ""
 local firstSeat = nil
 local secondSeat = nil
 
--- TẠO THƯ MỤC LƯU FILE CHO DELTA/EXECUTORS
-if isfolder and not isfolder("BABFT_Builds") then
-    makefolder("BABFT_Builds")
+-- TẠO THƯ MỤC LƯU FILE CHUẨN CHO DELTA/EXECUTORS
+if makefolder and isfolder and not isfolder("BABFT_Builds") then
+    pcall(function() makefolder("BABFT_Builds") end)
 end
 
 -- ==========================================
@@ -117,7 +117,7 @@ matTitle.InputEnded:Connect(function(input)
 end)
 
 -- ==========================================
--- TẠO NÚT THU NHỎ / M mở RỘNG (FLOATING BUTTON NEX)
+-- TẠO NÚT THU NHỎ / MỞ RỘNG (FLOATING BUTTON NEX)
 -- ==========================================
 local toggleGui = Instance.new("ScreenGui")
 toggleGui.Name = "NEXToggleGui"
@@ -184,7 +184,7 @@ local blocksFolder = workspace:WaitForChild("Blocks")
 -- ==========================================
 -- HỆ THỐNG ÉP ĐỘ CHÍNH XÁC (MILI MÉT)
 -- ==========================================
-local PRECISION = 10000 -- Ép tròn 4 số thập phân để đảm bảo khớp tuyệt đối với lưới game
+local PRECISION = 10000
 
 local function snapVector3(vec)
     return Vector3.new(
@@ -258,7 +258,6 @@ end
 
 local function rescaleBlock(block:Model, newPos:CFrame, newSize:Vector3) : ()
     if not block then 
-        print("Block Not Found, Function rescaleBlock")
         return 
     end
     local tool
@@ -270,7 +269,6 @@ local function rescaleBlock(block:Model, newPos:CFrame, newSize:Vector3) : ()
         tool = character.ScalingTool
     end
 
-    -- Sử dụng hệ thống độ chính xác mili mét ở đây
     local args = { block, snapVector3(newSize), snapCFrame(newPos) }
     task.spawn(function()
         tool.RF:InvokeServer(unpack(args))
@@ -286,7 +284,6 @@ local function getPlayerZone(playerInstance : Player) : BasePart
             end
         end
     end
-    print("Base Not Found for player: ".. playerInstance.Name)
     return nil
 end
 
@@ -301,7 +298,6 @@ local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, An
     end
     if not relativeTo then relativeTo = getPlayerZone(player) end
     
-    -- Xử lý độ chính xác tuyệt đối của offset và position
     local rawOffset = relativeTo and relativeTo.CFrame:ToObjectSpace(pos) or CFrame.new()
     local snappedOffset = snapCFrame(rawOffset)
     local snappedPos = snapCFrame(pos)
@@ -322,11 +318,9 @@ end
 
 local function paintBlock(block : Model, color : Color3)
     if not block then 
-        print("Block Not Found, function paintBlock")
         return 
     end
     if not block:FindFirstChild("PPart") then 
-        print("Not PPart found for: ".. block.Name)
         return
     end
     if block.PPart.Color == color then return end
@@ -359,7 +353,6 @@ end
 
 local function getNewBlockPos(hisBase : BasePart?, block : Model, myBase : BasePart?) : CFrame
     if not block or not block:FindFirstChild("PPart") then
-        warn("Block missing PPart:", block and block.Name or "nil")
         return CFrame.new()
     end
 
@@ -368,7 +361,6 @@ local function getNewBlockPos(hisBase : BasePart?, block : Model, myBase : BaseP
     end
 
     local offset = hisBase.CFrame:ToObjectSpace(block.PPart.CFrame)
-    -- Ép offset tuyệt đối để chống sai số thập phân
     offset = snapCFrame(offset)
     return snapCFrame(myBase.CFrame * offset)
 end
@@ -394,27 +386,35 @@ local function copyBuild(blocks : Folder) : table
                     Relative = getPlayerZone(player),
                     Transparency = block.PPart.Transparency,
                     Anchored = block.PPart.Anchored,
-                    Size = snapVector3(block.PPart.Size), -- Ép size chuẩn mili mét
+                    Size = snapVector3(block.PPart.Size),
                     Color = block.PPart.Color
                 })
-            else
-                print("You Dont Have Enough: ".. block.Name .. "s")
             end
-        else
-            print(block.Name.. " Didnt Have A PPart")
         end
     end
     return t
 end
 
+-- ==========================================
+-- ĐÃ FIX: KHẮC PHỤC LỖI TRÙNG TÂM / BỎ SÓT VẬT LIỆU
+-- ==========================================
+local trackedAssignedBlocks = {}
+
 local function getMissingBlocks(expectedList, createdList)
     local missing = {}
+    local matchedIndices = {}
+    
     for i, v in ipairs(expectedList) do
         local found = false
-        for _, b in ipairs(createdList) do
-            if b and b:FindFirstChild("PPart") and (b.Name == v.Name) then
-                found = true
-                break
+        for idx, b in ipairs(createdList) do
+            if not matchedIndices[idx] and b and b:FindFirstChild("PPart") and (b.Name == v.Name) then
+                local dist = (b.PPart.Position - v.Pos.Position).Magnitude
+                -- Tăng độ nhạy dung sai quét tâm gần nhau (0.5 studs) để không bị sót hay nhận nhầm
+                if dist < 0.5 then
+                    matchedIndices[idx] = true
+                    found = true
+                    break
+                end
             end
         end
         if not found then
@@ -427,12 +427,17 @@ end
 local function getBlock(expected, createdList)
     local best = nil
     local bestDist = math.huge
-    for _, b in ipairs(createdList) do
-        if b and b:FindFirstChild("PPart") and b.Name == expected.Name then
+    for idx, b in ipairs(createdList) do
+        if not trackedAssignedBlocks[idx] and b and b:FindFirstChild("PPart") and b.Name == expected.Name then
             local dist = (b.PPart.Position - expected.Pos.Position).Magnitude
             if dist < bestDist then
                 bestDist = dist
                 best = b
+                -- Tạm đánh dấu để tránh lấy nhầm block có tâm đè sát nhau
+                if dist < 0.3 then
+                    trackedAssignedBlocks[idx] = true
+                    break
+                end
             end
         end
     end
@@ -451,14 +456,15 @@ local function pasteBuild(t, folder)
     pastePercent = 0
     local childrenDebug = 0
     local c
-    local blocks = {}
     local tCount = #t
     local lastPlaced = tick()
+    trackedAssignedBlocks = {}
+    
     c = folder.ChildAdded:Connect(function(child)
         childrenDebug += 1
         lastPlaced = tick()
     end) 
-    print("Started Placing Blocks")
+    
     for i,v in ipairs(t) do
         placeBlock(v.Name, v.Pos, v.Relative, v.Anchored)
         pastePercent += 50/tCount
@@ -469,21 +475,17 @@ local function pasteBuild(t, folder)
     repeat
         task.wait(0.1)
     until tick() - lastPlaced > 5
-    print("Children Count After Placing: "..childrenDebug .. " Expected: ".. tCount)
-    if tCount - childrenDebug > 0 then
-        local missing = getMissingBlocks(t, blocks)
-        print("Missing " .. #missing .. " children which includes:")
-        for _, b in ipairs(missing) do
-            print("Index:", b.Index, "Name:", b.Name, "Position:", b.Pos.Position)
-        end
-    end
-    print("Started Painting And Rescaling")
+    
     local playerBaseList = folder:GetChildren()
+    trackedAssignedBlocks = {}
+    
     for i,v in ipairs(t) do
         local b = getBlock(v, playerBaseList)
-        rescaleBlock(b, v.Pos, v.Size)
-        paintBlock(b, v.Color)
-        setTransparency(v.Transparency, b)
+        if b then
+            rescaleBlock(b, v.Pos, v.Size)
+            paintBlock(b, v.Color)
+            setTransparency(v.Transparency, b)
+        end
         if i % 20 == 0 then
             task.wait(0.05)
         end
@@ -505,12 +507,11 @@ local function getRealName(DisplayNamey : string) : string
     for _,v in pairs(players:GetChildren()) do
         if v.DisplayName == DisplayNamey then return v.Name end
     end
-    print("Player Not Found")
     return nil
 end
 
 -- ==========================================
--- FILE SAVE/LOAD HELPER FUNCTIONS
+-- FILE SAVE/LOAD HELPER FUNCTIONS (ĐÃ FIX LƯU VÀ TÌM FILE SAU KHI SERVER HOP)
 -- ==========================================
 local function serializeData(data)
     local serialized = {}
@@ -560,15 +561,20 @@ end
 
 local function getSavedBuilds()
     local builds = {}
-    if isfolder and isfolder("BABFT_Builds") then
-        local files = listfiles("BABFT_Builds")
-        for _, file in ipairs(files) do
-            if file:match("%.Build$") then
-                local name = file:match("([^/\\]+)%.Build$")
-                if name then table.insert(builds, name) end
+    pcall(function()
+        if isfolder and not isfolder("BABFT_Builds") then
+            makefolder("BABFT_Builds")
+        end
+        if isfolder and isfolder("BABFT_Builds") then
+            local files = listfiles("BABFT_Builds")
+            for _, file in ipairs(files) do
+                if file:match("%.Build$") then
+                    local name = file:match("([^/\\]+)%.Build$")
+                    if name then table.insert(builds, name) end
+                end
             end
         end
-    end
+    end)
     if #builds == 0 then return {"None"} end
     return builds
 end
@@ -664,7 +670,6 @@ local function bringPlayer(playerToBring : Player , firstSeat : Seat, secondSeat
     local originalPos = character:GetPivot()
     local otherPlayerCharacter = playerToBring.Character
     if not otherPlayerCharacter then
-        print("Other Player No Character Found")
         return
     end
     local offset = firstSeat.CFrame:Inverse() * secondSeat.CFrame
@@ -706,14 +711,14 @@ local Window = Rayfield:CreateWindow({
 
 -- TABS
 local autoBuildTab = Window:CreateTab("Xây Dựng", "hammer")
-local fileBuildTab = Window:CreateTab("Lưu / Tải Tệp (.Build)", "save") -- TAB MỚI LƯU/TẢI FILE
+local fileBuildTab = Window:CreateTab("Lưu / Tải Tệp (.Build)", "save")
 local materialTab = Window:CreateTab("Quản Lý", "clipboard-list")
 local autoFarmTab = Window:CreateTab("Auto Farm", "coins")
 local funTab = Window:CreateTab("Fun Tab", "rewind")
 local serverTab = Window:CreateTab("Server", "server")
 
 -- ==========================================
--- TAB: LƯU / TẢI TỆP (.BUILD) - MỚI
+-- TAB: LƯU / TẢI TỆP (.BUILD)
 -- ==========================================
 local targetPlayerToSave = nil
 local fileNameToSave = ""
@@ -757,11 +762,14 @@ fileBuildTab:CreateButton({
             return
         end
         if targetPlayerToSave then
-            local rawData = copyBuild(targetPlayerToSave)
-            local serialized = serializeData(rawData)
-            local json = HttpService:JSONEncode(serialized)
-            writefile("BABFT_Builds/" .. fileNameToSave .. ".Build", json)
-            Rayfield:Notify({Title="Thành Công", Content="Đã lưu tệp: " .. fileNameToSave .. ".Build vào thư mục workspace/BABFT_Builds", Duration=4, Image="check-circle"})
+            pcall(function()
+                if not isfolder("BABFT_Builds") then makefolder("BABFT_Builds") end
+                local rawData = copyBuild(targetPlayerToSave)
+                local serialized = serializeData(rawData)
+                local json = HttpService:JSONEncode(serialized)
+                writefile("BABFT_Builds/" .. fileNameToSave .. ".Build", json)
+            end)
+            Rayfield:Notify({Title="Thành Công", Content="Đã lưu tệp: " .. fileNameToSave .. ".Build thành công!", Duration=4, Image="check-circle"})
         else
             Rayfield:Notify({Title="Lỗi", Content="Vui lòng chọn người chơi hợp lệ!", Duration=3, Image="alert-triangle"})
         end
@@ -799,6 +807,8 @@ fileBuildTab:CreateButton({
                     clipboard = deserializeData(decoded)
                     Rayfield:Notify({Title="Đang Xây", Content="Đã tải dữ liệu, bắt đầu xây: " .. selectedFileToLoad, Duration=3, Image="hammer"})
                     pasteBuild(clipboard, getPlayerBase())
+                else
+                    Rayfield:Notify({Title="Lỗi", Content="Không tìm thấy tệp đường dẫn!", Duration=3, Image="alert-triangle"})
                 end
             end
         else
@@ -821,7 +831,6 @@ autoBuildTab:CreateToggle({
     Name = "Rescale Block ( click block )",
     Callback = function(Value)
         rescaleClick = Value
-        print("Set rescaleClick to: "..tostring(Value))
     end,
 })
 
@@ -878,7 +887,6 @@ autoBuildTab:CreateButton({
     end,
 })
 
--- === NÚT XÓA VẬT LIỆU MỚI THÊM (ĐÃ ĐƯỢC CHỈNH SỬA XÓA NGAY LẬP TỨC) ===
 autoBuildTab:CreateButton({
     Name = "Xóa vật liệu cũ (Xóa Ngay Lập Tức)",
     Callback = function()
@@ -904,7 +912,6 @@ autoBuildTab:CreateButton({
                 Image = "trash"
             })
             
-            -- Xóa không có độ trễ bằng cách tạo thread cho mỗi block
             for _, block in ipairs(blocks) do
                 if block and block.Parent then
                     task.spawn(function()
@@ -933,7 +940,6 @@ autoBuildTab:CreateButton({
         end
     end,
 })
--- =================================
 
 local pasteStatus = autoBuildTab:CreateParagraph({
     Title = "Auto Build Progress", 
@@ -1019,9 +1025,6 @@ funTab:CreateButton({
     Name = "Sit In The First Seat and Click",
     Callback = function()
         firstSeat = humanoid.SeatPart
-        if firstSeat then
-            print("firstSeat: "..firstSeat:GetFullName())
-        end
     end,
 })
 
@@ -1029,9 +1032,6 @@ funTab:CreateButton({
     Name = "Sit In The Second Seat and Click",
     Callback = function()
         secondSeat = humanoid.SeatPart
-        if secondSeat then
-            print("secondSeat: "..secondSeat:GetFullName())
-        end
     end,
 })
 
@@ -1197,16 +1197,13 @@ funTab:CreateButton({
     end,
 })
 
-
 -- ==========================================
 -- TAB 5: SERVER HOP LOGIC & AUTO EXECUTE
 -- ==========================================
 serverTab:CreateSection("Quản Lý Server")
 
--- Hàm hỗ trợ tự động chạy lại Script khi sang server mới qua executor
 local queue_on_teleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or function() end
 
--- CẤU HÌNH LINK SCRIPT MỚI THEO YÊU CẦU
 local scriptUrl = "https://raw.githubusercontent.com/duongtandatkgi-ops/Scripfree/refs/heads/main/Buil.lua"
 local autoExecuteCode = 'loadstring(game:HttpGet("' .. scriptUrl .. '"))()'
 
@@ -1303,7 +1300,7 @@ local function refreshAllDropdowns()
     dd:Refresh(plrs)
     dd2:Refresh(plrs)
     dd3:Refresh(plrs)
-    ddSave:Refresh(plrs) -- THÊM REFRESH CHO TAB TỆP
+    ddSave:Refresh(plrs)
 end
 
 players.PlayerAdded:Connect(refreshAllDropdowns)
@@ -1316,7 +1313,6 @@ local mouse = player:GetMouse()
 mouse.Button1Down:Connect(function()
     if rescaleClick then
         if mouse.Target then
-            print(mouse.Target:GetFullName())
             local ppart = mouse.Target
             rescaleBlock(ppart.Parent, ppart.CFrame, Vector3.new(4, 4, 4))
         end
