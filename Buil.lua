@@ -1,5 +1,5 @@
 -- ==========================================
--- INTEGRATED NEX HUB & RAYFIELD INTERFACE SUITE
+-- INTEGRATED NEX HUB & RAYFIELD INTERFACE SUITE (FIXED TEAM SWITCHING)
 -- ==========================================
 
 local HttpService = game:GetService("HttpService")
@@ -276,6 +276,7 @@ local function rescaleBlock(block:Model, newPos:CFrame, newSize:Vector3) : ()
 end
 
 local function getPlayerZone(playerInstance : Player) : BasePart
+    if not playerInstance then return nil end
     local teamColor = playerInstance.TeamColor
     for _,v in pairs(workspace:GetChildren()) do
         if v:FindFirstChild("TeamColor") and v.TeamColor.Value then
@@ -338,52 +339,30 @@ local function paintBlock(block : Model, color : Color3)
     end)
 end
 
-local function getJoint(model : Model) : JointInstance?
-    for _,v in pairs(model.PPart:GetChildren()) do
-        if v:IsA("Snap") or v:IsA("Weld") then
-            if v.Part1 then 
-                if not (v.Part1.Parent == model) then
-                    return v.Part1
-                end
-            end
-        end
-    end
-    return getPlayerZone(player)
-end
-
-local function getNewBlockPos(hisBase : BasePart?, block : Model, myBase : BasePart?) : CFrame
-    if not block or not block:FindFirstChild("PPart") then
-        return CFrame.new()
-    end
-
-    if not hisBase or not myBase then
-        return snapCFrame(block.PPart.CFrame)
-    end
-
-    local offset = hisBase.CFrame:ToObjectSpace(block.PPart.CFrame)
-    offset = snapCFrame(offset)
-    return snapCFrame(myBase.CFrame * offset)
-end
-
+-- SAO CHÉP DỮ LIỆU THUYỀN (LƯU VỊ TRÍ TƯƠNG ĐỐI VỚI CĂN CỨ GỐC)
 local function copyBuild(blocks : Folder) : table
     local t = {}
-    local myBase = getPlayerZone(player)
     local hisBase = getPlayerZone(players:FindFirstChild(blocks.Name))
+    usedList = {}
 
     for _,block in ipairs(blocks:GetChildren()) do
         if block:FindFirstChild("PPart") then
             if not (getBlockID(block.Name) == 0 or (usedList[block.Name] or 0) > getBlockID(block.Name)) then 
-                local relative = getJoint(block)
-                relative = relative == hisBase and myBase or relative
                 if usedList[block.Name] then
                     usedList[block.Name] += 1
                 else
                     usedList[block.Name] = 1
                 end
+
+                -- Chuyển tọa độ thế giới của khối thành Tọa độ tương đối so với Căn cứ gốc
+                local localPos = block.PPart.CFrame
+                if hisBase then
+                    localPos = hisBase.CFrame:ToObjectSpace(block.PPart.CFrame)
+                end
+
                 table.insert(t, {
                     Name = block.Name,
-                    Pos = getNewBlockPos(hisBase, block, myBase),
-                    Relative = getPlayerZone(player),
+                    Pos = snapCFrame(localPos), -- Lưu offset tương đối
                     Transparency = block.PPart.Transparency,
                     Anchored = block.PPart.Anchored,
                     Size = snapVector3(block.PPart.Size),
@@ -395,34 +374,8 @@ local function copyBuild(blocks : Folder) : table
     return t
 end
 
--- ==========================================
--- ĐÃ FIX: KHẮC PHỤC LỖI TRÙNG TÂM / BỎ SÓT VẬT LIỆU
--- ==========================================
+-- Quản lý ghép nối block trùng vị trí
 local trackedAssignedBlocks = {}
-
-local function getMissingBlocks(expectedList, createdList)
-    local missing = {}
-    local matchedIndices = {}
-    
-    for i, v in ipairs(expectedList) do
-        local found = false
-        for idx, b in ipairs(createdList) do
-            if not matchedIndices[idx] and b and b:FindFirstChild("PPart") and (b.Name == v.Name) then
-                local dist = (b.PPart.Position - v.Pos.Position).Magnitude
-                -- Tăng độ nhạy dung sai quét tâm gần nhau (0.5 studs) để không bị sót hay nhận nhầm
-                if dist < 0.5 then
-                    matchedIndices[idx] = true
-                    found = true
-                    break
-                end
-            end
-        end
-        if not found then
-            table.insert(missing, {Index = i, Name = v.Name, Pos = v.Pos})
-        end
-    end
-    return missing
-end
 
 local function getBlock(expected, createdList)
     local best = nil
@@ -433,7 +386,6 @@ local function getBlock(expected, createdList)
             if dist < bestDist then
                 bestDist = dist
                 best = b
-                -- Tạm đánh dấu để tránh lấy nhầm block có tâm đè sát nhau
                 if dist < 0.3 then
                     trackedAssignedBlocks[idx] = true
                     break
@@ -452,7 +404,10 @@ local function getPlayerBase() : Folder
     end
 end
 
+-- XÂY THUYỀN (TỰ ĐỘNG CHUYỂN TỌA ĐỘ VỀ ĐỘI HIỆN TẠI)
 local function pasteBuild(t, folder)
+    if not t or #t == 0 then return end
+    
     pastePercent = 0
     local childrenDebug = 0
     local c
@@ -460,13 +415,42 @@ local function pasteBuild(t, folder)
     local lastPlaced = tick()
     trackedAssignedBlocks = {}
     
+    -- Lấy căn cứ hiện tại của người chơi tại thời điểm bấm XÂY
+    local myBase = getPlayerZone(player)
+    if not myBase then
+        if Rayfield then
+            Rayfield:Notify({
+                Title = "Lỗi",
+                Content = "Không tìm thấy khu vực đội hiện tại của bạn!",
+                Duration = 3,
+                Image = "alert-triangle"
+            })
+        end
+        return
+    end
+
+    -- Đổi tọa độ tương đối thành Tọa độ Thế giới thực tế trên Căn cứ Đội hiện tại
+    local adjustedBuild = {}
+    for _, v in ipairs(t) do
+        local worldPos = snapCFrame(myBase.CFrame * v.Pos)
+        table.insert(adjustedBuild, {
+            Name = v.Name,
+            Pos = worldPos,
+            Relative = myBase,
+            Transparency = v.Transparency,
+            Anchored = v.Anchored,
+            Size = v.Size,
+            Color = v.Color
+        })
+    end
+
     c = folder.ChildAdded:Connect(function(child)
         childrenDebug += 1
         lastPlaced = tick()
     end) 
     
-    for i,v in ipairs(t) do
-        placeBlock(v.Name, v.Pos, v.Relative, v.Anchored)
+    for i,v in ipairs(adjustedBuild) do
+        placeBlock(v.Name, v.Pos, myBase, v.Anchored)
         pastePercent += 50/tCount
         if i % 20 == 0 then
             task.wait(0.05)
@@ -479,7 +463,7 @@ local function pasteBuild(t, folder)
     local playerBaseList = folder:GetChildren()
     trackedAssignedBlocks = {}
     
-    for i,v in ipairs(t) do
+    for i,v in ipairs(adjustedBuild) do
         local b = getBlock(v, playerBaseList)
         if b then
             rescaleBlock(b, v.Pos, v.Size)
@@ -511,7 +495,7 @@ local function getRealName(DisplayNamey : string) : string
 end
 
 -- ==========================================
--- FILE SAVE/LOAD HELPER FUNCTIONS (ĐÃ FIX LƯU VÀ TÌM FILE SAU KHI SERVER HOP)
+-- FILE SAVE/LOAD HELPER FUNCTIONS
 -- ==========================================
 local function serializeData(data)
     local serialized = {}
@@ -543,7 +527,6 @@ local function deserializeData(data)
             Name = v.Name,
             Transparency = v.Transparency,
             Anchored = v.Anchored,
-            Relative = getPlayerZone(player)
         }
         if v.Pos then
             dItem.Pos = CFrame.new(unpack(v.Pos))
@@ -578,7 +561,6 @@ local function getSavedBuilds()
     if #builds == 0 then return {"None"} end
     return builds
 end
-
 
 -- ==========================================
 -- NEX MATERIAL LOGIC
