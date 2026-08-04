@@ -1,5 +1,6 @@
 -- ==========================================
 -- INTEGRATED NEX HUB & RAYFIELD INTERFACE SUITE (FIXED TEAM SWITCHING)
+-- + HỆ THỐNG XÂY NHANH BATCHING TỐI ƯU
 -- ==========================================
 
 local HttpService = game:GetService("HttpService")
@@ -313,7 +314,7 @@ local function placeBlock(name : string, pos : CFrame, relativeTo : BasePart, An
         false,
     }
     task.spawn(function()
-        tool.RF:InvokeServer(unpack(args))
+        pcall(function() tool.RF:InvokeServer(unpack(args)) end)
     end)
 end
 
@@ -404,7 +405,7 @@ local function getPlayerBase() : Folder
     end
 end
 
--- XÂY THUYỀN (TỰ ĐỘNG CHUYỂN TỌA ĐỘ VỀ ĐỘI HIỆN TẠI)
+-- XÂY THUYỀN (CƠ BẢN)
 local function pasteBuild(t, folder)
     if not t or #t == 0 then return end
     
@@ -478,6 +479,193 @@ local function pasteBuild(t, folder)
     c:Disconnect()
     pastePercent = 0
 end
+
+-- ==========================================
+-- HỆ THỐNG XÂY NHANH (BATCHING TỪ SCRIPT 2)
+-- ==========================================
+local trackedAssignedBlocksFast = {}
+
+local function colorMatch(c1, c2)
+    return math.abs(c1.R - c2.R) < 0.01 and math.abs(c1.G - c2.G) < 0.01 and math.abs(c1.B - c2.B) < 0.01
+end
+
+local function getToolFast(toolName)
+    local tool = character:FindFirstChild(toolName) or player.Backpack:FindFirstChild(toolName)
+    if tool and tool.Parent == player.Backpack then
+        humanoid:EquipTool(tool)
+        task.wait(0.1)
+    end
+    return character:FindFirstChild(toolName)
+end
+
+local function getBlockForAssigningFast(expected, createdList)
+    local best = nil
+    local bestDist = math.huge
+    for idx, b in ipairs(createdList) do
+        if not trackedAssignedBlocksFast[idx] and b and b:FindFirstChild("PPart") and b.Name == expected.Name then
+            local dist = (b.PPart.Position - expected.Pos.Position).Magnitude
+            if dist < bestDist then
+                bestDist = dist
+                best = b
+                if dist < 0.3 then
+                    trackedAssignedBlocksFast[idx] = true
+                    break
+                end
+            end
+        end
+    end
+    if best and bestDist >= 0.3 then
+        for idx, b in ipairs(createdList) do
+            if b == best then trackedAssignedBlocksFast[idx] = true break end
+        end
+    end
+    return best
+end
+
+local function rescaleBlocksFast(blocksData)
+    local tool = getToolFast("ScalingTool")
+    if not tool or not tool:FindFirstChild("RF") then return end
+    
+    for i, data in ipairs(blocksData) do
+        local block, pos, size = data[1], data[2], data[3]
+        if block then
+            task.spawn(function()
+                pcall(function() tool.RF:InvokeServer(block, snapVector3(size), snapCFrame(pos)) end)
+            end)
+            if i % 15 == 0 then task.wait(0.03) end 
+        end
+    end
+end
+
+local function paintBlocksBatch(blocksAndColors)
+    local tool = getToolFast("PaintingTool")
+    if not tool or not tool:FindFirstChild("RF") then return end
+    
+    local chunk = {}
+    for i, data in ipairs(blocksAndColors) do
+        local block, color = data[1], data[2]
+        if block and block:FindFirstChild("PPart") and not colorMatch(block.PPart.Color, color) then
+            table.insert(chunk, {block, color})
+        end
+        
+        if #chunk >= 100 then
+            pcall(function() tool.RF:InvokeServer(chunk) end)
+            chunk = {}
+            task.wait(0.1)
+        end
+    end
+    if #chunk > 0 then
+        pcall(function() tool.RF:InvokeServer(chunk) end)
+    end
+end
+
+local function setTransparencyBatch(blocksAndTrans)
+    local tool = getToolFast("PropertiesTool")
+    if not tool or not tool:FindFirstChild("SetPropertieRF") then return end
+    
+    local clickGroups = {}
+    for _, data in ipairs(blocksAndTrans) do
+        local block, targetTrans = data[1], data[2]
+        if block and block:FindFirstChild("PPart") then
+            local currentTrans = block.PPart.Transparency
+            if currentTrans ~= targetTrans then
+                local calls = math.ceil(targetTrans / 0.25)
+                if calls > 0 then
+                    if not clickGroups[calls] then clickGroups[calls] = {} end
+                    table.insert(clickGroups[calls], block)
+                end
+            end
+        end
+    end
+    
+    for calls, blocks in pairs(clickGroups) do
+        local chunk = {}
+        for i, b in ipairs(blocks) do
+            table.insert(chunk, b)
+            if #chunk >= 100 then
+                for c = 1, calls do
+                    pcall(function() tool.SetPropertieRF:InvokeServer("Transparency", chunk) end)
+                end
+                chunk = {}
+                task.wait(0.1)
+            end
+        end
+        if #chunk > 0 then
+            for c = 1, calls do
+                pcall(function() tool.SetPropertieRF:InvokeServer("Transparency", chunk) end)
+            end
+        end
+    end
+end
+
+local function pasteBuildFast(t)
+    if not t or #t == 0 then return end
+    local myBase = getPlayerZone(player)
+    if not myBase then return end
+    pastePercent = 0
+    local tCount = #t
+
+    local adjustedBuild = {}
+    for _, v in ipairs(t) do
+        table.insert(adjustedBuild, {
+            Name = v.Name,
+            Pos = snapCFrame(myBase.CFrame * v.Pos),
+            Transparency = v.Transparency,
+            Anchored = v.Anchored,
+            Size = v.Size,
+            Color = v.Color
+        })
+    end
+
+    local requiredTools = {"BuildingTool", "ScalingTool", "PaintingTool", "PropertiesTool"}
+    for _, tName in ipairs(requiredTools) do getToolFast(tName) end
+    task.wait(0.5) 
+
+    local lastPlaced = tick()
+    local c = blocksFolder.DescendantAdded:Connect(function(desc)
+        if desc:IsA("Model") or desc:IsA("BasePart") then lastPlaced = tick() end
+    end) 
+    
+    for i,v in ipairs(adjustedBuild) do
+        placeBlock(v.Name, v.Pos, myBase, v.Anchored)
+        pastePercent = (i / tCount) * 40
+        if i % 30 == 0 then task.wait() end
+    end
+    
+    repeat task.wait(0.1) until tick() - lastPlaced > 1.5
+    if c then c:Disconnect() end
+    
+    local myFolder = blocksFolder:FindFirstChild(player.Name)
+    local playerBaseList = myFolder and myFolder:GetChildren() or {}
+    trackedAssignedBlocksFast = {}
+    
+    local scaleData, paintData, transData = {}, {} ,{}
+    
+    for i,v in ipairs(adjustedBuild) do
+        local b = getBlockForAssigningFast(v, playerBaseList)
+        if b then
+            table.insert(scaleData, {b, v.Pos, v.Size})
+            table.insert(paintData, {b, v.Color})
+            table.insert(transData, {b, v.Transparency})
+        end
+        pastePercent = 40 + ((i / tCount) * 20)
+        if i % 50 == 0 then task.wait() end
+    end
+    
+    pastePercent = 70
+    rescaleBlocksFast(scaleData)
+    
+    pastePercent = 85
+    paintBlocksBatch(paintData)
+    
+    pastePercent = 95
+    setTransparencyBatch(transData)
+    
+    pastePercent = 100
+    task.wait(1)
+    pastePercent = 0
+end
+-- ==========================================
 
 local function getPlayers()
     local playersy = {}
@@ -778,7 +966,7 @@ fileBuildTab:CreateButton({
 })
 
 fileBuildTab:CreateButton({
-    Name = "🚀 TẢI & XÂY DỰNG TỆP NÀY",
+    Name = "🚀 TẢI & XÂY DỰNG TỆP NÀY (Cơ Bản)",
     Callback = function()
         if selectedFileToLoad ~= "" and selectedFileToLoad ~= "None" then
             if readfile then
@@ -789,6 +977,31 @@ fileBuildTab:CreateButton({
                     clipboard = deserializeData(decoded)
                     Rayfield:Notify({Title="Đang Xây", Content="Đã tải dữ liệu, bắt đầu xây: " .. selectedFileToLoad, Duration=3, Image="hammer"})
                     pasteBuild(clipboard, getPlayerBase())
+                else
+                    Rayfield:Notify({Title="Lỗi", Content="Không tìm thấy tệp đường dẫn!", Duration=3, Image="alert-triangle"})
+                end
+            end
+        else
+            Rayfield:Notify({Title="Lỗi", Content="Vui lòng chọn một tệp từ danh sách!", Duration=3, Image="alert-triangle"})
+        end
+    end,
+})
+
+-- NÚT XÂY TỪ TỆP NHƯNG SỬ DỤNG HỆ THỐNG XÂY NHANH TỐI ƯU
+fileBuildTab:CreateButton({
+    Name = "🚀 TẢI & XÂY NHANH TỆP NÀY (Bản Tối Ưu Batching)",
+    Callback = function()
+        if selectedFileToLoad ~= "" and selectedFileToLoad ~= "None" then
+            if readfile then
+                local path = "BABFT_Builds/" .. selectedFileToLoad .. ".Build"
+                if isfile(path) then
+                    local json = readfile(path)
+                    local decoded = HttpService:JSONDecode(json)
+                    clipboard = deserializeData(decoded)
+                    Rayfield:Notify({Title="Đang Xây Nhanh", Content="Bắt đầu xây: " .. selectedFileToLoad .. " với thuật toán siêu tốc!", Duration=3, Image="hammer"})
+                    task.spawn(function()
+                        pasteBuildFast(clipboard)
+                    end)
                 else
                     Rayfield:Notify({Title="Lỗi", Content="Không tìm thấy tệp đường dẫn!", Duration=3, Image="alert-triangle"})
                 end
@@ -854,10 +1067,35 @@ autoBuildTab:CreateButton({
 })
 
 autoBuildTab:CreateButton({
-    Name = "Paste Base",
+    Name = "Paste Base (Cơ Bản)",
     Callback = function()
         if clipboard then
             pasteBuild(clipboard, getPlayerBase())
+        else
+            Rayfield:Notify({
+                Title = "Lỗi",
+                Content = "Bộ nhớ trống, hãy copy trước!",
+                Duration = 3,
+                Image = "alert-triangle"
+            })
+        end
+    end,
+})
+
+-- ĐÂY LÀ NÚT BẤM "XÂY NHANH" ĐƯỢC THÊM MỚI THEO YÊU CẦU
+autoBuildTab:CreateButton({
+    Name = "🚀 Paste Base (Xây Nhanh Tối Ưu Batching)",
+    Callback = function()
+        if clipboard then
+            task.spawn(function()
+                pasteBuildFast(clipboard)
+            end)
+            Rayfield:Notify({
+                Title = "Đang xây",
+                Content = "Quá trình xây dựng siêu tốc đã bắt đầu!",
+                Duration = 3,
+                Image = "hammer"
+            })
         else
             Rayfield:Notify({
                 Title = "Lỗi",
